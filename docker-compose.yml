@@ -19,13 +19,7 @@ services:
       timeout: 10s
       retries: 5
       start_period: 120s
-    networks:
-      - oracle-network
 
 volumes:
   oracle-data:
     driver: local
-
-networks:
-  oracle-network:
-    driver: bridge
