@@ -4,6 +4,12 @@ require_once './config/database_oci8.php';
 
 $success_message = '';
 $error_message = '';
+$client_id = $_GET['id'] ?? null;
+
+if (!$client_id) {
+    header('Location: clients.php');
+    exit;
+}
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -14,11 +20,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $phone = trim($_POST['phone']);
         $client_type = $_POST['client_type'];
         
-        // Validate required fields
-        if (empty($clientname) || empty($phone)) {
-            throw new Exception("Client name and phone are required fields.");
-        }
-        
         // Get discount rate from client type
         $discount_rate = 0;
         if (!empty($client_type)) {
@@ -28,9 +29,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         
-        // Insert new client with discount from client type
-        $sql = "INSERT INTO Clients (CLIENTNAME, ADDRESS, CITY, PHONE, CLIENT_TYPE, DISCOUNT) 
-                VALUES (:clientname, :address, :city, :phone, :client_type, :discount)";
+        // Validate required fields
+        if (empty($clientname) || empty($phone)) {
+            throw new Exception("Client name and phone are required fields.");
+        }
+        
+        // Update client with discount from client type
+        $sql = "UPDATE Clients SET 
+                CLIENTNAME = :clientname, 
+                ADDRESS = :address, 
+                CITY = :city, 
+                PHONE = :phone, 
+                CLIENT_TYPE = :client_type,
+                DISCOUNT = :discount
+                WHERE CLIENT_NO = :client_id";
         
         $connection = DatabaseOCI8::getConnection();
         $stmt = oci_parse($connection, $sql);
@@ -41,14 +53,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         oci_bind_by_name($stmt, ':phone', $phone);
         oci_bind_by_name($stmt, ':client_type', $client_type);
         oci_bind_by_name($stmt, ':discount', $discount_rate);
+        oci_bind_by_name($stmt, ':client_id', $client_id);
         
         $result = oci_execute($stmt);
         
         if ($result) {
             oci_commit($connection);
-            $success_message = "Client added successfully!";
-            // Clear form data
-            $_POST = array();
+            $success_message = "Client updated successfully!";
         } else {
             $error = oci_error($stmt);
             throw new Exception("Database error: " . $error['message']);
@@ -62,6 +73,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             oci_free_statement($stmt);
         }
     }
+}
+
+// Get client data
+try {
+    $client = DatabaseOCI8::queryOne("
+        SELECT c.*, ct.TYPE_NAME 
+        FROM Clients c 
+        LEFT JOIN Client_Type ct ON c.CLIENT_TYPE = ct.CLIENT_TYPE 
+        WHERE c.CLIENT_NO = :client_id
+    ", [':client_id' => $client_id]);
+    
+    if (!$client) {
+        throw new Exception("Client not found.");
+    }
+} catch (Exception $e) {
+    $error_message = "Error loading client: " . $e->getMessage();
+    $client = null;
 }
 
 // Get client types for dropdown with discount rates
@@ -79,7 +107,10 @@ try {
             <div class="card">
                 <div class="card-header bg-primary text-white">
                     <h4 class="mb-0">
-                        <i class="fas fa-user-plus me-2"></i>Add New Client
+                        <i class="fas fa-user-edit me-2"></i>Edit Client
+                        <?php if ($client): ?>
+                            - <?php echo htmlspecialchars($client['CLIENTNAME']); ?>
+                        <?php endif; ?>
                     </h4>
                 </div>
                 <div class="card-body">
@@ -97,14 +128,15 @@ try {
                         </div>
                     <?php endif; ?>
 
-                    <form method="POST" action="add_client.php">
+                    <?php if ($client): ?>
+                    <form method="POST" action="edit_client.php?id=<?php echo $client_id; ?>">
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="clientname" class="form-label">
                                     <i class="fas fa-user me-1"></i>Client Name *
                                 </label>
                                 <input type="text" class="form-control" id="clientname" name="clientname" 
-                                       value="<?php echo htmlspecialchars($_POST['clientname'] ?? ''); ?>" 
+                                       value="<?php echo htmlspecialchars($_POST['clientname'] ?? $client['CLIENTNAME']); ?>" 
                                        required maxlength="50">
                             </div>
                             
@@ -113,7 +145,7 @@ try {
                                     <i class="fas fa-phone me-1"></i>Phone *
                                 </label>
                                 <input type="tel" class="form-control" id="phone" name="phone" 
-                                       value="<?php echo htmlspecialchars($_POST['phone'] ?? ''); ?>" 
+                                       value="<?php echo htmlspecialchars($_POST['phone'] ?? $client['PHONE']); ?>" 
                                        required maxlength="15">
                             </div>
                         </div>
@@ -123,20 +155,20 @@ try {
                                 <i class="fas fa-map-marker-alt me-1"></i>Address
                             </label>
                             <textarea class="form-control" id="address" name="address" rows="3" 
-                                      maxlength="150"><?php echo htmlspecialchars($_POST['address'] ?? ''); ?></textarea>
+                                      maxlength="150"><?php echo htmlspecialchars($_POST['address'] ?? $client['ADDRESS']); ?></textarea>
                         </div>
 
                         <div class="row">
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <label for="city" class="form-label">
                                     <i class="fas fa-city me-1"></i>City
                                 </label>
                                 <input type="text" class="form-control" id="city" name="city" 
-                                       value="<?php echo htmlspecialchars($_POST['city'] ?? ''); ?>" 
+                                       value="<?php echo htmlspecialchars($_POST['city'] ?? $client['CITY']); ?>" 
                                        maxlength="50">
                             </div>
                             
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <label for="client_type" class="form-label">
                                     <i class="fas fa-tags me-1"></i>Client Type
                                 </label>
@@ -145,7 +177,7 @@ try {
                                     <?php foreach ($client_types as $type): ?>
                                         <option value="<?php echo $type['CLIENT_TYPE']; ?>" 
                                                 data-discount="<?php echo $type['DISCOUNT_RATE']; ?>"
-                                                <?php echo (($_POST['client_type'] ?? '') == $type['CLIENT_TYPE']) ? 'selected' : ''; ?>>
+                                                <?php echo (($_POST['client_type'] ?? $client['CLIENT_TYPE']) == $type['CLIENT_TYPE']) ? 'selected' : ''; ?>>
                                             <?php echo htmlspecialchars($type['TYPE_NAME']); ?>
                                             <?php if ($type['DISCOUNT_RATE'] > 0): ?>
                                                 (<?php echo number_format($type['DISCOUNT_RATE'], 2); ?>% discount)
@@ -154,27 +186,26 @@ try {
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
+                            
+                            <div class="col-md-4 mb-3">
                                 <label for="discount_display" class="form-label">
                                     <i class="fas fa-percent me-1"></i>Discount Rate
                                 </label>
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="discount_display" readonly 
-                                           style="background-color: #e9ecef;" placeholder="Based on client type">
+                                           style="background-color: #e9ecef;" 
+                                           value="<?php echo number_format($_POST['discount'] ?? $client['DISCOUNT'] ?? 0, 2); ?>">
                                     <span class="input-group-text">%</span>
                                 </div>
                                 <small class="form-text text-muted">Discount is automatically set based on client type</small>
                             </div>
-                            
-                            <div class="col-md-6 mb-3">
-                                <div class="mt-4">
-                                    <div class="alert alert-info py-2" id="discount_info" style="display: none;">
-                                        <i class="fas fa-info-circle me-1"></i>
-                                        <span id="discount_message"></span>
-                                    </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <div class="alert alert-info py-2" id="discount_info" style="display: none;">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    <span id="discount_message"></span>
                                 </div>
                             </div>
                         </div>
@@ -184,10 +215,19 @@ try {
                                 <i class="fas fa-arrow-left me-1"></i>Back to Clients
                             </a>
                             <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-save me-1"></i>Add Client
+                                <i class="fas fa-save me-1"></i>Update Client
                             </button>
                         </div>
                     </form>
+                    <?php else: ?>
+                        <div class="text-center py-4">
+                            <i class="fas fa-user-slash fa-3x text-muted mb-3"></i>
+                            <div class="text-muted">Client not found or could not be loaded.</div>
+                            <a href="clients.php" class="btn btn-primary mt-3">
+                                <i class="fas fa-arrow-left me-1"></i>Back to Clients
+                            </a>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

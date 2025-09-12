@@ -1,6 +1,7 @@
 <?php
 require_once './includes/header.php';
 require_once './config/database_oci8.php';
+require_once './includes/utils.php';
 
 // Search and pagination parameters
 $search = $_GET['search'] ?? '';
@@ -184,10 +185,11 @@ try {
                                             </td>
                                             <td>
                                                 <div class="btn-group btn-group-sm" role="group">
-                                                    <button type="button" class="btn btn-outline-primary" 
-                                                            title="Edit Product">
+                                                    <a href="edit_product.php?id=<?php echo $product['PRODUCT_NO']; ?>" 
+                                                       class="btn btn-outline-primary" 
+                                                       data-bs-toggle="tooltip" title="Edit Product">
                                                         <i class="fas fa-edit"></i>
-                                                    </button>
+                                                    </a>
                                                     <button type="button" class="btn btn-outline-info" 
                                                             title="View Details">
                                                         <i class="fas fa-eye"></i>

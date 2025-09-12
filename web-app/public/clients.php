@@ -62,51 +62,45 @@ try {
 }
 ?>
 
-<div class="page-header">
-    <div class="container">
-        <div class="row align-items-center">
-            <div class="col-md-6">
-                <h1>
-                    <i class="fas fa-users me-3"></i>
-                    Clients
-                </h1>
-                <p class="lead mb-0">Manage your client database</p>
-            </div>
-            <div class="col-md-6 text-end">
-                <a href="add_client.php" class="btn btn-success">
-                    <i class="fas fa-plus me-2"></i>
-                    Add New Client
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Search and Filters -->
-<div class="row mb-4">
-    <div class="col-md-6">
-        <form method="GET" class="d-flex">
-            <input type="text" class="form-control me-2" name="search" 
-                   placeholder="Search clients..." value="<?php echo htmlspecialchars($search); ?>">
-            <button type="submit" class="btn btn-outline-primary">
-                <i class="fas fa-search"></i>
-            </button>
-            <?php if ($search): ?>
-                <a href="clients.php" class="btn btn-outline-secondary ms-2">
-                    <i class="fas fa-times"></i>
-                </a>
-            <?php endif; ?>
-        </form>
-    </div>
-    <div class="col-md-6 text-end">
-        <div class="text-muted">
-            Showing <?php echo number_format($total_records); ?> client(s)
-            <?php if ($search): ?>
-                for "<?php echo htmlspecialchars($search); ?>"
-            <?php endif; ?>
-        </div>
-    </div>
-</div>
+<!-- Clients Management Page -->
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">
+                        <i class="fas fa-users me-2"></i>Clients Management
+                    </h4>
+                    <a href="add_client.php" class="btn btn-light">
+                        <i class="fas fa-plus me-1"></i>Add Client
+                    </a>
+                </div>
+                <div class="card-body">
+                    <!-- Search Form -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <form method="GET" action="clients.php" class="d-flex">
+                                <input type="text" class="form-control me-2" name="search" 
+                                       placeholder="Search clients..." value="<?php echo htmlspecialchars($search); ?>">
+                                <button class="btn btn-outline-primary" type="submit">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                                <?php if (!empty($search)): ?>
+                                    <a href="clients.php" class="btn btn-outline-secondary ms-2">
+                                        <i class="fas fa-times"></i>
+                                    </a>
+                                <?php endif; ?>
+                            </form>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <span class="badge bg-info fs-6">
+                                Total: <?php echo number_format($total_records); ?> clients
+                                <?php if ($search): ?>
+                                    (filtered for "<?php echo htmlspecialchars($search); ?>")
+                                <?php endif; ?>
+                            </span>
+                        </div>
+                    </div>
 
 <!-- Clients Table -->
 <div class="card">
@@ -218,6 +212,9 @@ try {
                 <?php endif; ?>
             </div>
         <?php endif; ?>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 

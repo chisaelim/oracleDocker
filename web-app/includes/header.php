@@ -67,6 +67,15 @@ require_once __DIR__ . '/../config/database.php';
                         </ul>
                     </li>
                     <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="jobsDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-briefcase me-1"></i>Jobs
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="jobs.php">View Jobs</a></li>
+                            <li><a class="dropdown-item" href="add_job.php">Add Job</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="invoicesDropdown" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-file-invoice me-1"></i>Invoices
                         </a>

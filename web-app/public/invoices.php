@@ -1,6 +1,7 @@
 <?php
 require_once './includes/header.php';
 require_once './config/database_oci8.php';
+require_once './includes/utils.php';
 
 // Search and pagination parameters
 $search = $_GET['search'] ?? '';
