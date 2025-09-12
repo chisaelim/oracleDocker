@@ -1,0 +1,130 @@
+-- Sample Data Insert Script for Oracle Business Database
+-- This script populates the tables with sample data for testing
+
+-- Connect to the pluggable database
+ALTER SESSION SET CONTAINER = XEPDB1;
+
+-- Enable DBMS_OUTPUT
+SET SERVEROUTPUT ON;
+
+-- Insert sample data into Client_Type
+INSERT INTO Client_Type (TYPE_NAME, DISCOUNT_RATE, REMARKS) VALUES ('Regular', 0.00, 'Standard customers');
+INSERT INTO Client_Type (TYPE_NAME, DISCOUNT_RATE, REMARKS) VALUES ('VIP', 10.00, 'VIP customers with 10% discount');
+INSERT INTO Client_Type (TYPE_NAME, DISCOUNT_RATE, REMARKS) VALUES ('Corporate', 15.00, 'Corporate clients with bulk discount');
+INSERT INTO Client_Type (TYPE_NAME, DISCOUNT_RATE, REMARKS) VALUES ('Wholesale', 20.00, 'Wholesale customers');
+
+-- Insert sample data into Product_Type
+INSERT INTO Product_Type (PRODUCTTYPE_NAME, REMARKS) VALUES ('Electronics', 'Electronic devices and gadgets');
+INSERT INTO Product_Type (PRODUCTTYPE_NAME, REMARKS) VALUES ('Clothing', 'Apparel and accessories');
+INSERT INTO Product_Type (PRODUCTTYPE_NAME, REMARKS) VALUES ('Books', 'Books and educational materials');
+INSERT INTO Product_Type (PRODUCTTYPE_NAME, REMARKS) VALUES ('Home & Garden', 'Home improvement and garden supplies');
+
+-- Insert sample data into JOBS
+INSERT INTO JOBS (JOB_TITLE, MIN_SALARY, MAX_SALARY) VALUES ('Sales Representative', 30000, 50000);
+INSERT INTO JOBS (JOB_TITLE, MIN_SALARY, MAX_SALARY) VALUES ('Sales Manager', 50000, 80000);
+INSERT INTO JOBS (JOB_TITLE, MIN_SALARY, MAX_SALARY) VALUES ('Store Manager', 60000, 90000);
+INSERT INTO JOBS (JOB_TITLE, MIN_SALARY, MAX_SALARY) VALUES ('Cashier', 25000, 35000);
+INSERT INTO JOBS (JOB_TITLE, MIN_SALARY, MAX_SALARY) VALUES ('Inventory Clerk', 28000, 40000);
+
+-- Insert sample data into Clients
+INSERT INTO Clients (CLIENTNAME, ADDRESS, CITY, PHONE, CLIENT_TYPE, DISCOUNT) 
+VALUES ('John Smith', '123 Main St', 'New York', '555-0001', 1, 0.00);
+
+INSERT INTO Clients (CLIENTNAME, ADDRESS, CITY, PHONE, CLIENT_TYPE, DISCOUNT) 
+VALUES ('Sarah Johnson', '456 Oak Ave', 'Los Angeles', '555-0002', 2, 12.00);
+
+INSERT INTO Clients (CLIENTNAME, ADDRESS, CITY, PHONE, CLIENT_TYPE, DISCOUNT) 
+VALUES ('Microsoft Corp', '789 Corporate Blvd', 'Seattle', '555-0003', 3, 18.00);
+
+INSERT INTO Clients (CLIENTNAME, ADDRESS, CITY, PHONE, CLIENT_TYPE, DISCOUNT) 
+VALUES ('ABC Wholesale', '321 Commerce St', 'Chicago', '555-0004', 4, 22.00);
+
+INSERT INTO Clients (CLIENTNAME, ADDRESS, CITY, PHONE, CLIENT_TYPE, DISCOUNT) 
+VALUES ('Emily Davis', '654 Elm St', 'Boston', '555-0005', 1, 0.00);
+
+-- Insert sample data into Products
+INSERT INTO Products (PRODUCT_NO, PRODUCTNAME, PRODUCTTYPE, PROFIT_PERCENT, UNIT_MEASURE, REORDER_LEVEL, SELL_PRICE, COST_PRICE, QTY_ON_HAND) 
+VALUES ('EL001', 'Smartphone Pro Max', 1, 25.00, 'pieces', 10, 999.99, 750.00, 50);
+
+INSERT INTO Products (PRODUCT_NO, PRODUCTNAME, PRODUCTTYPE, PROFIT_PERCENT, UNIT_MEASURE, REORDER_LEVEL, SELL_PRICE, COST_PRICE, QTY_ON_HAND) 
+VALUES ('EL002', 'Wireless Headphones', 1, 30.00, 'pieces', 20, 199.99, 140.00, 75);
+
+INSERT INTO Products (PRODUCT_NO, PRODUCTNAME, PRODUCTTYPE, PROFIT_PERCENT, UNIT_MEASURE, REORDER_LEVEL, SELL_PRICE, COST_PRICE, QTY_ON_HAND) 
+VALUES ('CL001', 'Designer Jeans', 2, 50.00, 'pieces', 15, 89.99, 45.00, 120);
+
+INSERT INTO Products (PRODUCT_NO, PRODUCTNAME, PRODUCTTYPE, PROFIT_PERCENT, UNIT_MEASURE, REORDER_LEVEL, SELL_PRICE, COST_PRICE, QTY_ON_HAND) 
+VALUES ('CL002', 'Cotton T-Shirt', 2, 60.00, 'pieces', 30, 24.99, 10.00, 200);
+
+INSERT INTO Products (PRODUCT_NO, PRODUCTNAME, PRODUCTTYPE, PROFIT_PERCENT, UNIT_MEASURE, REORDER_LEVEL, SELL_PRICE, COST_PRICE, QTY_ON_HAND) 
+VALUES ('BK001', 'Programming Guide', 3, 40.00, 'pieces', 5, 49.99, 30.00, 25);
+
+INSERT INTO Products (PRODUCT_NO, PRODUCTNAME, PRODUCTTYPE, PROFIT_PERCENT, UNIT_MEASURE, REORDER_LEVEL, SELL_PRICE, COST_PRICE, QTY_ON_HAND) 
+VALUES ('HG001', 'Garden Tool Set', 4, 35.00, 'sets', 8, 79.99, 50.00, 40);
+
+-- Insert sample data into Employees
+INSERT INTO Employees (EMPLOYEENAME, GENDER, BIRTHDATE, JOB_ID, ADDRESS, PHONE, SALARY, REMARKS) 
+VALUES ('Alice Brown', 'Female', DATE '1990-05-15', 2, '111 Manager Ave', '555-1001', 65000, 'Experienced sales manager');
+
+INSERT INTO Employees (EMPLOYEENAME, GENDER, BIRTHDATE, JOB_ID, ADDRESS, PHONE, SALARY, REMARKS) 
+VALUES ('Bob Wilson', 'Male', DATE '1985-03-20', 1, '222 Sales St', '555-1002', 40000, 'Top performing sales rep');
+
+INSERT INTO Employees (EMPLOYEENAME, GENDER, BIRTHDATE, JOB_ID, ADDRESS, PHONE, SALARY, REMARKS) 
+VALUES ('Carol Martinez', 'Female', DATE '1995-08-10', 4, '333 Cashier Rd', '555-1003', 30000, 'Friendly and efficient');
+
+INSERT INTO Employees (EMPLOYEENAME, GENDER, BIRTHDATE, JOB_ID, ADDRESS, PHONE, SALARY, REMARKS) 
+VALUES ('David Lee', 'Male', DATE '1988-12-05', 5, '444 Inventory Ln', '555-1004', 35000, 'Detail-oriented inventory specialist');
+
+-- Insert sample data into INVOICES
+INSERT INTO INVOICES (INVOICE_DATE, CLIENT_NO, EMPLOYEEID, INVOICE_STATUS, INVOICEMEMO) 
+VALUES (DATE '2025-09-01', 1, 2, 'Paid', 'Regular customer purchase');
+
+INSERT INTO INVOICES (INVOICE_DATE, CLIENT_NO, EMPLOYEEID, INVOICE_STATUS, INVOICEMEMO) 
+VALUES (DATE '2025-09-05', 2, 1, 'Paid', 'VIP customer - discount applied');
+
+INSERT INTO INVOICES (INVOICE_DATE, CLIENT_NO, EMPLOYEEID, INVOICE_STATUS, INVOICEMEMO) 
+VALUES (DATE '2025-09-10', 3, 1, 'Pending', 'Corporate bulk order');
+
+INSERT INTO INVOICES (INVOICE_DATE, CLIENT_NO, EMPLOYEEID, INVOICE_STATUS, INVOICEMEMO) 
+VALUES (SYSDATE, 4, 2, 'Processing', 'Wholesale order - expedited');
+
+-- Insert sample data into INVOICE_DETAILS
+-- Invoice 1 details
+INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) VALUES (1, 'EL002', 1, 199.99);
+INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) VALUES (1, 'CL002', 2, 24.99);
+
+-- Invoice 2 details
+INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) VALUES (2, 'EL001', 1, 999.99);
+INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) VALUES (2, 'CL001', 1, 89.99);
+
+-- Invoice 3 details (Corporate order)
+INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) VALUES (3, 'EL001', 10, 950.00);
+INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) VALUES (3, 'EL002', 20, 180.00);
+INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) VALUES (3, 'BK001', 50, 45.00);
+
+-- Invoice 4 details (Wholesale order)
+INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) VALUES (4, 'CL001', 100, 70.00);
+INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) VALUES (4, 'CL002', 200, 20.00);
+INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) VALUES (4, 'HG001', 50, 65.00);
+
+-- Display data insertion summary
+SELECT 'Sample data inserted successfully!' AS STATUS FROM DUAL;
+
+-- Show record counts for each table
+SELECT 'CLIENT_TYPE' as table_name, COUNT(*) as record_count FROM Client_Type
+UNION ALL
+SELECT 'CLIENTS' as table_name, COUNT(*) as record_count FROM Clients
+UNION ALL
+SELECT 'PRODUCT_TYPE' as table_name, COUNT(*) as record_count FROM Product_Type
+UNION ALL
+SELECT 'PRODUCTS' as table_name, COUNT(*) as record_count FROM Products
+UNION ALL
+SELECT 'JOBS' as table_name, COUNT(*) as record_count FROM JOBS
+UNION ALL
+SELECT 'EMPLOYEES' as table_name, COUNT(*) as record_count FROM Employees
+UNION ALL
+SELECT 'INVOICES' as table_name, COUNT(*) as record_count FROM INVOICES
+UNION ALL
+SELECT 'INVOICE_DETAILS' as table_name, COUNT(*) as record_count FROM INVOICE_DETAILS
+ORDER BY table_name;
+
+COMMIT;
