@@ -19,7 +19,40 @@ services:
       timeout: 10s
       retries: 5
       start_period: 120s
+    networks:
+      - oracle-network
+
+  web-app:
+    build: 
+      context: ./web-app
+      dockerfile: Dockerfile
+    container_name: php-web-app
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - oracle-db
+    environment:
+      - PHP_TIMEZONE=UTC
+      - APACHE_DOCUMENT_ROOT=/var/www/html
+    volumes:
+      - ./web-app/public:/var/www/html
+      - ./web-app/config:/var/www/html/config
+      - ./web-app/includes:/var/www/html/includes
+      - ./web-app/assets:/var/www/html/assets
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/database_info.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - oracle-network
 
 volumes:
   oracle-data:
     driver: local
+
+networks:
+  oracle-network:
+    driver: bridge
