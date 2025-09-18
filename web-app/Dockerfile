@@ -99,8 +99,9 @@ COPY config/ /var/www/html/config/
 COPY includes/ /var/www/html/includes/
 COPY assets/ /var/www/html/assets/
 
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html \
+# Remove default Apache index.html and set permissions
+RUN rm -f /var/www/html/index.html \
+    && chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html
 
 # Health check

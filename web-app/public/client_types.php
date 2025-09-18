@@ -1,244 +1,390 @@
 <?php
-require_once './includes/header.php';
-require_once './config/database_oci8.php';
+// client_types.php - Client Types Management with CRUD Operations
+require_once 'config/config.php';
+require_once 'config/database.php';
+require_once 'includes/header.php';
+require_once 'includes/utils.php';
 
-$success_message = '';
-$error_message = '';
-
-// Handle form submission for adding new client type
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add') {
-    try {
-        $type_name = trim($_POST['type_name']);
-        $discount_rate = floatval($_POST['discount_rate']);
-        $remarks = trim($_POST['remarks']);
-        
-        // Validate required fields
-        if (empty($type_name)) {
-            throw new Exception("Type name is required.");
-        }
-        
-        // Insert new client type
-        $sql = "INSERT INTO Client_Type (TYPE_NAME, DISCOUNT_RATE, REMARKS) 
-                VALUES (:type_name, :discount_rate, :remarks)";
-        
-        $connection = DatabaseOCI8::getConnection();
-        $stmt = oci_parse($connection, $sql);
-        
-        oci_bind_by_name($stmt, ':type_name', $type_name);
-        oci_bind_by_name($stmt, ':discount_rate', $discount_rate);
-        oci_bind_by_name($stmt, ':remarks', $remarks);
-        
-        $result = oci_execute($stmt);
-        
-        if ($result) {
-            oci_commit($connection);
-            $success_message = "Client type added successfully!";
-            // Clear form data
-            $_POST = array();
-        } else {
-            $error = oci_error($stmt);
-            throw new Exception("Database error: " . $error['message']);
-        }
-        
-        oci_free_statement($stmt);
-        
-    } catch (Exception $e) {
-        $error_message = $e->getMessage();
-        if (isset($stmt)) {
-            oci_free_statement($stmt);
-        }
-    }
+// Handle form submissions
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    handleFormSubmission();
 }
 
-// Handle delete action
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete') {
-    try {
-        $client_type_id = intval($_POST['client_type_id']);
-        
-        $sql = "DELETE FROM Client_Type WHERE CLIENT_TYPE = :client_type_id";
-        $connection = DatabaseOCI8::getConnection();
-        $stmt = oci_parse($connection, $sql);
-        oci_bind_by_name($stmt, ':client_type_id', $client_type_id);
-        
-        $result = oci_execute($stmt);
-        
-        if ($result) {
-            oci_commit($connection);
-            $success_message = "Client type deleted successfully!";
-        } else {
-            $error = oci_error($stmt);
-            throw new Exception("Database error: " . $error['message']);
-        }
-        
-        oci_free_statement($stmt);
-        
-    } catch (Exception $e) {
-        $error_message = $e->getMessage();
-        if (isset($stmt)) {
-            oci_free_statement($stmt);
-        }
-    }
+// Handle delete requests
+if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) {
+    handleDelete($_GET['id']);
 }
 
-// Get all client types
-try {
-    $client_types = DatabaseOCI8::query("
-        SELECT ct.CLIENT_TYPE, ct.TYPE_NAME, ct.DISCOUNT_RATE, ct.REMARKS,
-               COUNT(c.CLIENT_NO) as CLIENT_COUNT
-        FROM Client_Type ct
-        LEFT JOIN Clients c ON ct.CLIENT_TYPE = c.CLIENT_TYPE
-        GROUP BY ct.CLIENT_TYPE, ct.TYPE_NAME, ct.DISCOUNT_RATE, ct.REMARKS
-        ORDER BY ct.TYPE_NAME
-    ");
-} catch (Exception $e) {
-    $client_types = [];
-    $error_message = "Error loading client types: " . $e->getMessage();
+// Handle edit requests
+$editClientType = null;
+if (isset($_GET['action']) && $_GET['action'] === 'edit' && isset($_GET['id'])) {
+    $editClientType = getClientTypeById($_GET['id']);
 }
+
+// Get all client types for display
+$clientTypes = getAllClientTypes();
 ?>
 
-<div class="container mt-4">
+<div class="container-fluid mt-4">
     <div class="row">
         <div class="col-12">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <h4 class="mb-0">
                         <i class="fas fa-tags me-2"></i>Client Types Management
                     </h4>
+                    <button type="button" class="btn btn-light" data-bs-toggle="modal" data-bs-target="#clientTypeModal" onclick="resetForm()">
+                        <i class="fas fa-plus me-1"></i>Add New Client Type
+                    </button>
                 </div>
                 <div class="card-body">
-                    <?php if ($success_message): ?>
-                        <div class="alert alert-success alert-dismissible fade show" role="alert">
-                            <i class="fas fa-check-circle me-2"></i><?php echo htmlspecialchars($success_message); ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    <?php endif; ?>
                     
-                    <?php if ($error_message): ?>
-                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                            <i class="fas fa-exclamation-circle me-2"></i><?php echo htmlspecialchars($error_message); ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    <?php if (empty($clientTypes)): ?>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>No client types found. Start by adding your first client type!
                         </div>
-                    <?php endif; ?>
-
-                    <!-- Add New Client Type Form -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h5 class="mb-0">
-                                <i class="fas fa-plus me-2"></i>Add New Client Type
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <form method="POST" action="client_types.php">
-                                <input type="hidden" name="action" value="add">
-                                <div class="row">
-                                    <div class="col-md-4 mb-3">
-                                        <label for="type_name" class="form-label">Type Name *</label>
-                                        <input type="text" class="form-control" id="type_name" name="type_name" 
-                                               value="<?php echo htmlspecialchars($_POST['type_name'] ?? ''); ?>" 
-                                               required maxlength="30">
-                                    </div>
-                                    <div class="col-md-3 mb-3">
-                                        <label for="discount_rate" class="form-label">Discount Rate (%)</label>
-                                        <input type="number" class="form-control" id="discount_rate" name="discount_rate" 
-                                               value="<?php echo htmlspecialchars($_POST['discount_rate'] ?? '0'); ?>" 
-                                               min="0" max="100" step="0.01">
-                                    </div>
-                                    <div class="col-md-3 mb-3">
-                                        <label for="remarks" class="form-label">Remarks</label>
-                                        <input type="text" class="form-control" id="remarks" name="remarks" 
-                                               value="<?php echo htmlspecialchars($_POST['remarks'] ?? ''); ?>" 
-                                               maxlength="50">
-                                    </div>
-                                    <div class="col-md-2 mb-3 d-flex align-items-end">
-                                        <button type="submit" class="btn btn-primary w-100">
-                                            <i class="fas fa-save me-1"></i>Add
-                                        </button>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-
-                    <!-- Client Types Table -->
+                    <?php else: ?>
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover">
-                            <thead class="table-dark">
+                        <table class="table table-hover data-table">
+                            <thead>
                                 <tr>
                                     <th>ID</th>
                                     <th>Type Name</th>
                                     <th>Discount Rate</th>
                                     <th>Remarks</th>
-                                    <th>Clients Using</th>
-                                    <th>Actions</th>
+                                    <th width="150">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php if (empty($client_types)): ?>
-                                    <tr>
-                                        <td colspan="6" class="text-center py-4">
-                                            <i class="fas fa-tags fa-3x text-muted mb-3"></i>
-                                            <div class="text-muted">No client types available.</div>
-                                        </td>
-                                    </tr>
-                                <?php else: ?>
-                                    <?php foreach ($client_types as $type): ?>
-                                        <tr>
-                                            <td>
-                                                <strong><?php echo htmlspecialchars($type['CLIENT_TYPE'] ?? ''); ?></strong>
-                                            </td>
-                                            <td>
-                                                <strong><?php echo htmlspecialchars($type['TYPE_NAME'] ?? ''); ?></strong>
-                                            </td>
-                                            <td>
-                                                <?php if (!empty($type['DISCOUNT_RATE'])): ?>
-                                                    <span class="badge bg-success">
-                                                        <?php echo number_format($type['DISCOUNT_RATE'], 2); ?>%
-                                                    </span>
-                                                <?php else: ?>
-                                                    <span class="text-muted">0%</span>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td><?php echo htmlspecialchars($type['REMARKS'] ?? ''); ?></td>
-                                            <td class="text-center">
-                                                <span class="badge bg-info">
-                                                    <?php echo intval($type['CLIENT_COUNT'] ?? 0); ?> clients
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <div class="btn-group btn-group-sm" role="group">
-                                                    <button type="button" class="btn btn-outline-primary" 
-                                                            title="Edit Client Type">
-                                                        <i class="fas fa-edit"></i>
-                                                    </button>
-                                                    <?php if (intval($type['CLIENT_COUNT']) == 0): ?>
-                                                        <form method="POST" action="client_types.php" 
-                                                              class="d-inline" 
-                                                              onsubmit="return confirm('Are you sure you want to delete this client type?')">
-                                                            <input type="hidden" name="action" value="delete">
-                                                            <input type="hidden" name="client_type_id" value="<?php echo $type['CLIENT_TYPE']; ?>">
-                                                            <button type="submit" class="btn btn-outline-danger btn-sm" 
-                                                                    title="Delete Client Type">
-                                                                <i class="fas fa-trash"></i>
-                                                            </button>
-                                                        </form>
-                                                    <?php else: ?>
-                                                        <button type="button" class="btn btn-outline-secondary btn-sm" 
-                                                                title="Cannot delete - has clients" disabled>
-                                                            <i class="fas fa-lock"></i>
-                                                        </button>
-                                                    <?php endif; ?>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
+                                <?php foreach ($clientTypes as $type): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($type['CLIENT_TYPE']) ?></td>
+                                    <td>
+                                        <strong><?= htmlspecialchars($type['TYPE_NAME']) ?></strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">
+                                            <?= number_format($type['DISCOUNT_RATE'], 2) ?>%
+                                        </span>
+                                    </td>
+                                    <td><?= htmlspecialchars($type['REMARKS'] ?? '-') ?></td>
+                                    <td>
+                                        <div class="action-buttons">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" 
+                                                    onclick="editClientType(<?= $type['CLIENT_TYPE'] ?>, '<?= htmlspecialchars($type['TYPE_NAME']) ?>', <?= $type['DISCOUNT_RATE'] ?>, '<?= htmlspecialchars($type['REMARKS']) ?>')"
+                                                    data-bs-toggle="tooltip" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                                    onclick="confirmDelete(<?= $type['CLIENT_TYPE'] ?>, '<?= htmlspecialchars($type['TYPE_NAME']) ?>')"
+                                                    data-bs-toggle="tooltip" title="Delete">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
+                <?php endif; ?>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<?php require_once './includes/footer.php'; ?>
+<!-- Client Type Modal -->
+<div class="modal fade" id="clientTypeModal" tabindex="-1" aria-labelledby="clientTypeModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="clientTypeModalLabel">Add New Client Type</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" id="clientTypeForm">
+                <div class="modal-body">
+                    <input type="hidden" id="clientTypeId" name="id">
+                    <input type="hidden" name="action" id="formAction" value="create">
+                    <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
+                    
+                    <div class="mb-3">
+                        <label for="typeName" class="form-label">Type Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="typeName" name="type_name" required maxlength="30">
+                        <div class="form-text">Maximum 30 characters</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="discountRate" class="form-label">Discount Rate (%)</label>
+                        <input type="number" class="form-control" id="discountRate" name="discount_rate" 
+                               min="0" max="100" step="0.01" value="0">
+                        <div class="form-text">Enter discount rate as a percentage (0-100)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="remarks" class="form-label">Remarks</label>
+                        <textarea class="form-control" id="remarks" name="remarks" rows="3" maxlength="50"></textarea>
+                        <div class="form-text">Optional remarks about this client type (max 50 characters)</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <i class="fas fa-save me-1"></i>Save Client Type
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Reset form when modal is opened for new client type
+function resetForm() {
+    document.getElementById('clientTypeForm').reset();
+    document.getElementById('clientTypeId').value = '';
+    document.getElementById('formAction').value = 'create';
+    document.getElementById('clientTypeModalLabel').textContent = 'Add New Client Type';
+    document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save me-1"></i>Save Client Type';
+}
+
+// Edit client type function
+function editClientType(id, name, discount, remarks) {
+    document.getElementById('clientTypeId').value = id;
+    document.getElementById('formAction').value = 'update';
+    document.getElementById('typeName').value = name;
+    document.getElementById('discountRate').value = parseFloat(discount).toFixed(2);
+    document.getElementById('remarks').value = remarks || '';
+    
+    document.getElementById('clientTypeModalLabel').textContent = 'Edit Client Type';
+    document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save me-1"></i>Update Client Type';
+    
+    new bootstrap.Modal(document.getElementById('clientTypeModal')).show();
+}
+
+// Confirm delete
+function confirmDelete(typeId, typeName) {
+    Swal.fire({
+        title: 'Confirm Deletion',
+        text: `Are you sure you want to delete client type "${typeName}"?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!',
+        cancelButtonText: 'Cancel'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            window.location.href = `client_types.php?action=delete&id=${typeId}`;
+        }
+    });
+}
+</script>
+
+<?php require_once 'includes/footer.php';
+
+// PHP Functions
+function getAllClientTypes() {
+    try {
+        $db = Database::getInstance();
+        $sql = "SELECT CLIENT_TYPE, TYPE_NAME, DISCOUNT_RATE, REMARKS FROM Client_Type ORDER BY TYPE_NAME";
+        $stmt = $db->query($sql);
+        return $db->fetchAll($stmt);
+    } catch (Exception $e) {
+        setFlashMessage("Error loading client types: " . $e->getMessage(), 'danger');
+        return [];
+    }
+}
+
+function getClientTypeById($id) {
+    try {
+        $db = Database::getInstance();
+        $sql = "SELECT CLIENT_TYPE, TYPE_NAME, DISCOUNT_RATE, REMARKS FROM Client_Type WHERE CLIENT_TYPE = :id";
+        $stmt = oci_parse($db->getConnection(), $sql);
+        $id_param = $id;
+        oci_bind_by_name($stmt, ':id', $id_param);
+        oci_execute($stmt);
+        $result = oci_fetch_assoc($stmt);
+        oci_free_statement($stmt);
+        return $result;
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+function handleFormSubmission() {
+    if (!verifyCSRFToken($_POST['csrf_token'])) {
+        setFlashMessage('Invalid request. Please try again.', 'danger');
+        return;
+    }
+    
+    $action = $_POST['action'];
+    
+    if ($action === 'create') {
+        createClientType($_POST);
+    } elseif ($action === 'update') {
+        updateClientType($_POST);
+    }
+}
+
+function createClientType($data) {
+    try {
+        // Validate required fields
+        if (empty($data['type_name'])) {
+            setFlashMessage('Please fill in all required fields.', 'danger');
+            return;
+        }
+        
+        // Validate field lengths
+        if (strlen($data['type_name']) > 30) {
+            setFlashMessage('Type name must be 30 characters or less.', 'danger');
+            return;
+        }
+        
+        if (!empty($data['discount_rate']) && ($data['discount_rate'] < 0 || $data['discount_rate'] > 100)) {
+            setFlashMessage('Discount rate must be between 0 and 100.', 'danger');
+            return;
+        }
+        
+        if (!empty($data['remarks']) && strlen($data['remarks']) > 50) {
+            setFlashMessage('Remarks must be 50 characters or less.', 'danger');
+            return;
+        }
+        
+        $db = Database::getInstance();
+        
+        $sql = "INSERT INTO Client_Type (TYPE_NAME, DISCOUNT_RATE, REMARKS) 
+                VALUES (:type_name, :discount_rate, :remarks)";
+        
+        $stmt = oci_parse($db->getConnection(), $sql);
+        
+        // Extract values to variables for binding by reference
+        $type_name = $data['type_name'];
+        $discount_rate = $data['discount_rate'] ?: 0;
+        $remarks = $data['remarks'] ?? null;
+        
+        oci_bind_by_name($stmt, ':type_name', $type_name);
+        oci_bind_by_name($stmt, ':discount_rate', $discount_rate);
+        oci_bind_by_name($stmt, ':remarks', $remarks);
+        
+        if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) {
+            $error = oci_error($stmt);
+            throw new Exception('Database Error: ' . $error['message']);
+        }
+        
+        oci_commit($db->getConnection());
+        oci_free_statement($stmt);
+        
+        setFlashMessage('Client type created successfully!', 'success');
+        header('Location: client_types.php');
+        exit;
+        
+    } catch (Exception $e) {
+        setFlashMessage('Error creating client type: ' . $e->getMessage(), 'danger');
+    }
+}
+
+function updateClientType($data) {
+    try {
+        // Validate required fields
+        if (empty($data['type_name']) || empty($data['id'])) {
+            setFlashMessage('Please fill in all required fields.', 'danger');
+            return;
+        }
+        
+        // Validate field lengths
+        if (strlen($data['type_name']) > 30) {
+            setFlashMessage('Type name must be 30 characters or less.', 'danger');
+            return;
+        }
+        
+        if (!empty($data['discount_rate']) && ($data['discount_rate'] < 0 || $data['discount_rate'] > 100)) {
+            setFlashMessage('Discount rate must be between 0 and 100.', 'danger');
+            return;
+        }
+        
+        if (!empty($data['remarks']) && strlen($data['remarks']) > 50) {
+            setFlashMessage('Remarks must be 50 characters or less.', 'danger');
+            return;
+        }
+        
+        $db = Database::getInstance();
+        
+        $sql = "UPDATE Client_Type SET TYPE_NAME = :type_name, DISCOUNT_RATE = :discount_rate, REMARKS = :remarks 
+                WHERE CLIENT_TYPE = :id";
+        
+        $stmt = oci_parse($db->getConnection(), $sql);
+        
+        // Extract values to variables for binding by reference
+        $type_name = $data['type_name'];
+        $discount_rate = $data['discount_rate'] ?: 0;
+        $remarks = $data['remarks'] ?? null;
+        $id = $data['id'];
+        
+        oci_bind_by_name($stmt, ':type_name', $type_name);
+        oci_bind_by_name($stmt, ':discount_rate', $discount_rate);
+        oci_bind_by_name($stmt, ':remarks', $remarks);
+        oci_bind_by_name($stmt, ':id', $id);
+        
+        if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) {
+            $error = oci_error($stmt);
+            throw new Exception('Database Error: ' . $error['message']);
+        }
+        
+        oci_commit($db->getConnection());
+        oci_free_statement($stmt);
+        
+        setFlashMessage('Client type updated successfully!', 'success');
+        header('Location: client_types.php');
+        exit;
+        
+    } catch (Exception $e) {
+        setFlashMessage('Error updating client type: ' . $e->getMessage(), 'danger');
+    }
+}
+
+function handleDelete($id) {
+    try {
+        $db = Database::getInstance();
+        
+        // Check if client type is being used by any clients
+        $checkSql = "SELECT COUNT(*) as count FROM Clients WHERE CLIENT_TYPE = :id";
+        $checkStmt = oci_parse($db->getConnection(), $checkSql);
+        $id_param = $id;
+        oci_bind_by_name($checkStmt, ':id', $id_param);
+        oci_execute($checkStmt);
+        $row = oci_fetch_assoc($checkStmt);
+        
+        if ($row && $row['COUNT'] > 0) {
+            setFlashMessage('Cannot delete client type as it is being used by existing clients.', 'danger');
+            oci_free_statement($checkStmt);
+            header('Location: client_types.php');
+            exit;
+        }
+        
+        oci_free_statement($checkStmt);
+        
+        // Delete the client type
+        $deleteSql = "DELETE FROM Client_Type WHERE CLIENT_TYPE = :id";
+        $deleteStmt = oci_parse($db->getConnection(), $deleteSql);
+        $delete_id = $id;
+        oci_bind_by_name($deleteStmt, ':id', $delete_id);
+        
+        if (!oci_execute($deleteStmt, OCI_NO_AUTO_COMMIT)) {
+            $error = oci_error($deleteStmt);
+            throw new Exception('Database Error: ' . $error['message']);
+        }
+        
+        oci_commit($db->getConnection());
+        oci_free_statement($deleteStmt);
+        
+        setFlashMessage('Client type deleted successfully!', 'success');
+        
+    } catch (Exception $e) {
+        setFlashMessage('Error deleting client type: ' . $e->getMessage(), 'danger');
+    }
+    
+    header('Location: client_types.php');
+    exit;
+}
+?>

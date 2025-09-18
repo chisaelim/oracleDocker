@@ -1,236 +1,269 @@
-// Application JavaScript
-document.addEventListener('DOMContentLoaded', function() {
-    
-    // Auto-hide alerts after 5 seconds
-    const alerts = document.querySelectorAll('.alert');
-    alerts.forEach(alert => {
-        if (alert.classList.contains('alert-success') || alert.classList.contains('alert-info')) {
-            setTimeout(() => {
-                const bsAlert = new bootstrap.Alert(alert);
-                bsAlert.close();
-            }, 5000);
-        }
-    });
+/**
+ * Main JavaScript application
+ */
+
+$(document).ready(function() {
+    // Initialize DataTables
+    if ($.fn.DataTable) {
+        $('.data-table').DataTable({
+            responsive: true,
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+            language: {
+                search: "_INPUT_",
+                searchPlaceholder: "Search records...",
+                lengthMenu: "Show _MENU_ entries",
+                info: "Showing _START_ to _END_ of _TOTAL_ entries",
+                infoEmpty: "No entries available",
+                infoFiltered: "(filtered from _MAX_ total entries)",
+                paginate: {
+                    first: "First",
+                    last: "Last",
+                    next: "Next",
+                    previous: "Previous"
+                }
+            },
+            dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+                 '<"row"<"col-sm-12"tr>>' +
+                 '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>'
+        });
+    }
     
     // Form validation
-    const forms = document.querySelectorAll('.needs-validation');
-    forms.forEach(form => {
-        form.addEventListener('submit', function(event) {
-            if (!form.checkValidity()) {
-                event.preventDefault();
-                event.stopPropagation();
-            }
-            form.classList.add('was-validated');
-        });
+    $('.needs-validation').on('submit', function(e) {
+        if (!this.checkValidity()) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        $(this).addClass('was-validated');
     });
+    
+    // Auto-hide alerts after 5 seconds
+    $('.alert:not(.alert-permanent)').delay(5000).fadeOut(500);
     
     // Confirm delete actions
-    const deleteButtons = document.querySelectorAll('.btn-delete');
-    deleteButtons.forEach(button => {
-        button.addEventListener('click', function(event) {
-            if (!confirm('Are you sure you want to delete this item? This action cannot be undone.')) {
-                event.preventDefault();
+    $('.delete-btn').on('click', function(e) {
+        e.preventDefault();
+        const url = $(this).attr('href');
+        const itemName = $(this).data('item-name') || 'this item';
+        
+        Swal.fire({
+            title: 'Are you sure?',
+            text: `You won't be able to revert the deletion of ${itemName}!`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Yes, delete it!',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                window.location.href = url;
             }
         });
     });
     
-    // Search functionality
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) {
-        let searchTimeout;
-        searchInput.addEventListener('input', function() {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                performSearch(this.value);
-            }, 300);
-        });
-    }
+    // Loading overlay functions
+    window.showLoading = function() {
+        $('body').append('<div class="spinner-overlay"><div class="spinner-border spinner-border-lg text-light" role="status"><span class="visually-hidden">Loading...</span></div></div>');
+    };
     
-    // Loading state for buttons
-    const loadingButtons = document.querySelectorAll('.btn-loading');
-    loadingButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const originalText = this.innerHTML;
-            this.innerHTML = '<span class="loading"></span> Loading...';
-            this.disabled = true;
-            
-            // Re-enable after 3 seconds (adjust as needed)
-            setTimeout(() => {
-                this.innerHTML = originalText;
-                this.disabled = false;
-            }, 3000);
-        });
-    });
+    window.hideLoading = function() {
+        $('.spinner-overlay').remove();
+    };
     
-    // Number formatting
-    const currencyInputs = document.querySelectorAll('.currency-input');
-    currencyInputs.forEach(input => {
-        input.addEventListener('blur', function() {
-            const value = parseFloat(this.value);
-            if (!isNaN(value)) {
-                this.value = value.toFixed(2);
-            }
-        });
-    });
-    
-    // Table row selection
-    const selectableRows = document.querySelectorAll('.selectable-row');
-    selectableRows.forEach(row => {
-        row.addEventListener('click', function() {
-            const checkbox = this.querySelector('input[type="checkbox"]');
-            if (checkbox) {
-                checkbox.checked = !checkbox.checked;
-                this.classList.toggle('table-active', checkbox.checked);
-            }
-        });
-    });
-    
-    // Select all functionality
-    const selectAllCheckbox = document.getElementById('selectAll');
-    if (selectAllCheckbox) {
-        selectAllCheckbox.addEventListener('change', function() {
-            const checkboxes = document.querySelectorAll('.row-checkbox');
-            checkboxes.forEach(checkbox => {
-                checkbox.checked = this.checked;
-                const row = checkbox.closest('tr');
-                if (row) {
-                    row.classList.toggle('table-active', this.checked);
+    // AJAX form submissions
+    $('.ajax-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        const form = $(this);
+        const url = form.attr('action');
+        const method = form.attr('method') || 'POST';
+        const formData = new FormData(this);
+        
+        showLoading();
+        
+        $.ajax({
+            url: url,
+            method: method,
+            data: formData,
+            processData: false,
+            contentType: false,
+            dataType: 'json',
+            success: function(response) {
+                hideLoading();
+                
+                if (response.success) {
+                    Swal.fire({
+                        title: 'Success!',
+                        text: response.message || 'Operation completed successfully',
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false
+                    }).then(() => {
+                        if (response.redirect) {
+                            window.location.href = response.redirect;
+                        } else {
+                            location.reload();
+                        }
+                    });
+                } else {
+                    Swal.fire({
+                        title: 'Error!',
+                        text: response.message || 'An error occurred',
+                        icon: 'error'
+                    });
                 }
-            });
-        });
-    }
-    
-    // Dynamic form fields
-    const addFieldButtons = document.querySelectorAll('.add-field');
-    addFieldButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const template = this.getAttribute('data-template');
-            const container = document.querySelector(this.getAttribute('data-container'));
-            if (template && container) {
-                const newField = document.createElement('div');
-                newField.innerHTML = template;
-                container.appendChild(newField);
+            },
+            error: function(xhr, status, error) {
+                hideLoading();
+                console.error('AJAX Error:', error);
+                
+                Swal.fire({
+                    title: 'Error!',
+                    text: 'An unexpected error occurred. Please try again.',
+                    icon: 'error'
+                });
             }
         });
     });
     
-    // Remove field functionality
-    document.addEventListener('click', function(event) {
-        if (event.target.classList.contains('remove-field')) {
-            const fieldContainer = event.target.closest('.field-container');
-            if (fieldContainer) {
-                fieldContainer.remove();
+    // Number formatting for currency fields
+    $('.currency-input').on('input', function() {
+        let value = $(this).val().replace(/[^\d.]/g, '');
+        if (value) {
+            const parts = value.split('.');
+            if (parts.length > 2) {
+                value = parts[0] + '.' + parts.slice(1).join('');
+            }
+            if (parts[1] && parts[1].length > 2) {
+                value = parts[0] + '.' + parts[1].substring(0, 2);
+            }
+            $(this).val(value);
+        }
+    });
+    
+    // Percentage input formatting
+    $('.percentage-input').on('input', function() {
+        let value = $(this).val().replace(/[^\d.]/g, '');
+        if (value) {
+            const num = parseFloat(value);
+            if (num > 100) {
+                $(this).val('100');
             }
         }
     });
     
-    // Tooltip initialization
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function(tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
+    // Phone number formatting
+    $('.phone-input').on('input', function() {
+        let value = $(this).val().replace(/\D/g, '');
+        if (value.length >= 6) {
+            if (value.length <= 10) {
+                value = value.replace(/(\d{3})(\d{3})(\d{1,4})/, '$1-$2-$3');
+            } else {
+                value = value.substring(0, 10).replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+            }
+        }
+        $(this).val(value);
     });
     
-    // Popover initialization
-    const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
-    popoverTriggerList.map(function(popoverTriggerEl) {
-        return new bootstrap.Popover(popoverTriggerEl);
+    // Initialize tooltips
+    if (typeof bootstrap !== 'undefined') {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function(tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+        
+        // Initialize popovers
+        const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+        popoverTriggerList.map(function(popoverTriggerEl) {
+            return new bootstrap.Popover(popoverTriggerEl);
+        });
+    }
+    
+    // Auto-resize textareas
+    $('textarea.auto-resize').on('input', function() {
+        this.style.height = 'auto';
+        this.style.height = this.scrollHeight + 'px';
+    });
+    
+    // Search functionality for dropdowns
+    $('.searchable-select').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: 'Select an option...',
+        allowClear: true
+    });
+    
+    // Copy to clipboard functionality
+    $('.copy-btn').on('click', function(e) {
+        e.preventDefault();
+        const text = $(this).data('copy-text') || $(this).siblings('input').val();
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = $(this);
+            const originalText = btn.html();
+            btn.html('<i class="fas fa-check"></i> Copied!');
+            setTimeout(() => {
+                btn.html(originalText);
+            }, 2000);
+        });
     });
 });
 
-// Search function
-function performSearch(query) {
-    if (query.length < 2) return;
-    
-    // This would typically make an AJAX request to search
-    console.log('Searching for:', query);
-    
-    // Example implementation:
-    /*
-    fetch(`search.php?q=${encodeURIComponent(query)}`)
-        .then(response => response.json())
-        .then(data => {
-            displaySearchResults(data);
-        })
-        .catch(error => {
-            console.error('Search error:', error);
-        });
-    */
-}
-
-// Display search results
-function displaySearchResults(results) {
-    const resultsContainer = document.getElementById('searchResults');
-    if (!resultsContainer) return;
-    
-    if (results.length === 0) {
-        resultsContainer.innerHTML = '<div class="alert alert-info">No results found.</div>';
-        return;
-    }
-    
-    let html = '<ul class="list-group">';
-    results.forEach(result => {
-        html += `<li class="list-group-item">
-            <a href="${result.url}" class="text-decoration-none">
-                <strong>${result.title}</strong><br>
-                <small class="text-muted">${result.description}</small>
-            </a>
-        </li>`;
-    });
-    html += '</ul>';
-    
-    resultsContainer.innerHTML = html;
-}
-
 // Utility functions
-const AppUtils = {
-    
+const Utils = {
     // Format currency
-    formatCurrency: function(amount, currency = '$') {
-        return currency + parseFloat(amount).toFixed(2);
+    formatCurrency: function(amount) {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD'
+        }).format(amount);
+    },
+    
+    // Format percentage
+    formatPercentage: function(value) {
+        return parseFloat(value).toFixed(2) + '%';
     },
     
     // Format date
-    formatDate: function(dateString, format = 'YYYY-MM-DD') {
+    formatDate: function(dateString) {
         const date = new Date(dateString);
-        if (isNaN(date.getTime())) return '';
-        
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        
-        return format
-            .replace('YYYY', year)
-            .replace('MM', month)
-            .replace('DD', day);
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
     },
     
-    // Show notification
-    showNotification: function(message, type = 'info') {
-        const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-        alertDiv.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        
-        const container = document.querySelector('.container');
-        if (container) {
-            container.insertBefore(alertDiv, container.firstChild);
-            
-            // Auto-remove after 5 seconds
-            setTimeout(() => {
-                if (alertDiv.parentNode) {
-                    const bsAlert = new bootstrap.Alert(alertDiv);
-                    bsAlert.close();
-                }
-            }, 5000);
-        }
+    // Debounce function
+    debounce: function(func, wait, immediate) {
+        let timeout;
+        return function executedFunction() {
+            const context = this;
+            const args = arguments;
+            const later = function() {
+                timeout = null;
+                if (!immediate) func.apply(context, args);
+            };
+            const callNow = immediate && !timeout;
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+            if (callNow) func.apply(context, args);
+        };
     },
     
-    // Confirm action
-    confirmAction: function(message, callback) {
-        if (confirm(message)) {
-            callback();
-        }
+    // Validate email
+    validateEmail: function(email) {
+        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return re.test(email);
+    },
+    
+    // Validate phone
+    validatePhone: function(phone) {
+        const re = /^[\+]?[1-9][\d]{0,15}$/;
+        return re.test(phone.replace(/\D/g, ''));
     }
 };
+
+// Export to global scope
+window.Utils = Utils;

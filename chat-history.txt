@@ -180,7 +180,7 @@ web-app/
    ```
 
 2. **Access the application:**
-   - **Web App:** http://localhost:8080
+   - **Web App:** http://localhost:8090
    - **Oracle EM:** http://localhost:5501/em
    - **Database:** localhost:1522
 
@@ -364,13 +364,13 @@ Ran terminal command: docker-compose ps
 
 Perfect! The web application is running and healthy. Now let's open it in the browser: 
 
-Opened Simple Browser at http://localhost:8080
+Opened Simple Browser at http://localhost:8090
 
 Excellent! 🎉 
 
 ## 🚀 **PHP Web Application Successfully Deployed!**
 
-Your PHP web application is now running and accessible at **http://localhost:8080**
+Your PHP web application is now running and accessible at **http://localhost:8090**
 
 ### **✅ What's Working:**
 
@@ -381,7 +381,7 @@ Your PHP web application is now running and accessible at **http://localhost:808
 
 ### **📋 Current Status:**
 
-- **Web App**: http://localhost:8080 ✅ **WORKING**
+- **Web App**: http://localhost:8090 ✅ **WORKING**
 - **Oracle Database**: localhost:1522 ✅ **RUNNING** (unhealthy status is normal)
 - **Oracle EM Express**: http://localhost:5501/em ✅ **AVAILABLE**
 
@@ -412,9 +412,9 @@ For now, you have a **fully functional PHP web application** that demonstrates t
 
 ### **🎯 Try These URLs:**
 
-- Main Dashboard: http://localhost:8080
-- PHP Environment: http://localhost:8080/phpinfo.php
-- Database Status: http://localhost:8080/database_info.php
+- Main Dashboard: http://localhost:8090
+- PHP Environment: http://localhost:8090/phpinfo.php
+- Database Status: http://localhost:8090/database_info.php
 
 The application is successfully deployed and ready for use! 🎉
 
@@ -506,15 +506,15 @@ Great! Now let's check if the application is working:
 
 Ran terminal command: docker-compose ps
 
-Summarized conversation historyGood! Both containers are running. The Oracle database is showing as "unhealthy" but that's normal during startup - it takes time to fully initialize. The web app is healthy and running on port 8080.
+Summarized conversation historyGood! Both containers are running. The Oracle database is showing as "unhealthy" but that's normal during startup - it takes time to fully initialize. The web app is healthy and running on port 8090.
 
 Let's test the application by opening it in the browser: 
 
-Opened Simple Browser at http://localhost:8080
+Opened Simple Browser at http://localhost:8090
 
 Now let's also check the database info page to see if the Oracle connection is working: 
 
-Opened Simple Browser at http://localhost:8080/database_info.php
+Opened Simple Browser at http://localhost:8090/database_info.php
 
 Let me check the Oracle database logs to see if it's fully started: 
 
@@ -745,9 +745,9 @@ Ran terminal command: docker-compose exec web-app curl -s http://localhost/clien
 
 Perfect! The PHP application is working successfully. Let's also verify that both the old and new database classes work by opening the pages in the browser: 
 
-Opened Simple Browser at http://localhost:8080
+Opened Simple Browser at http://localhost:8090
 
-Opened Simple Browser at http://localhost:8080/clients.php
+Opened Simple Browser at http://localhost:8090/clients.php
 
 Let me clean up the test file: 
 
@@ -765,10 +765,10 @@ Your PHP web application is now fully operational and successfully connected to 
 5. **Professional UI** - Responsive Bootstrap interface with navigation
 
 ### 🌐 **Access Your Application:**
-- **Main Application**: http://localhost:8080
-- **Database Info**: http://localhost:8080/database_info.php
-- **Clients Management**: http://localhost:8080/clients.php
-- **PHP Info**: http://localhost:8080/phpinfo.php
+- **Main Application**: http://localhost:8090
+- **Database Info**: http://localhost:8090/database_info.php
+- **Clients Management**: http://localhost:8090/clients.php
+- **PHP Info**: http://localhost:8090/phpinfo.php
 
 ### 📊 **Features Available:**
 - **Dashboard**: Statistics and recent data from Oracle
@@ -861,7 +861,7 @@ Ran terminal command: docker-compose exec web-app curl -s http://localhost/ | fi
 
 Perfect! Let me also open the page in the browser to verify it's working visually: 
 
-Opened Simple Browser at http://localhost:8080
+Opened Simple Browser at http://localhost:8090
 
 Let me also check the Apache error logs to make sure there are no underlying issues: 
 
@@ -991,13 +991,13 @@ Ran terminal command: docker-compose up web-app -d
 
 Now let me test some of the new functionality: 
 
-Opened Simple Browser at http://localhost:8080
+Opened Simple Browser at http://localhost:8090
 
-Opened Simple Browser at http://localhost:8080/products.php
+Opened Simple Browser at http://localhost:8090/products.php
 
-Opened Simple Browser at http://localhost:8080/employees.php
+Opened Simple Browser at http://localhost:8090/employees.php
 
-Opened Simple Browser at http://localhost:8080/add_client.php
+Opened Simple Browser at http://localhost:8090/add_client.php
 
 Let me test if one of the add forms is working by checking if we can access it: 
 
@@ -1162,9 +1162,9 @@ Ran terminal command: docker-compose exec web-app curl -s http://localhost/produ
 
 Perfect! Let me test the client types management page: 
 
-Opened Simple Browser at http://localhost:8080/client_types.php
+Opened Simple Browser at http://localhost:8090/client_types.php
 
-Opened Simple Browser at http://localhost:8080/add_product.php
+Opened Simple Browser at http://localhost:8090/add_product.php
 
 ## 🎉 Complete Database Interaction System Successfully Implemented!
 
@@ -1223,16 +1223,16 @@ I have successfully added all the remaining database interaction functions to yo
 - **Interactive Elements**: Modals, dropdowns, calculated fields
 
 ### 🔗 **Available Pages:**
-- **Dashboard**: http://localhost:8080 (Statistics & recent data)
-- **Clients**: http://localhost:8080/clients.php (Browse & search)
-- **Add Client**: http://localhost:8080/add_client.php (Create new)
-- **Products**: http://localhost:8080/products.php (Product catalog)
-- **Add Product**: http://localhost:8080/add_product.php (Create new)
-- **Employees**: http://localhost:8080/employees.php (Staff directory)
-- **Add Employee**: http://localhost:8080/add_employee.php (Create new)
-- **Invoices**: http://localhost:8080/invoices.php (Invoice management)
-- **Client Types**: http://localhost:8080/client_types.php (Category management)
-- **Product Types**: http://localhost:8080/product_types.php (Category management)
+- **Dashboard**: http://localhost:8090 (Statistics & recent data)
+- **Clients**: http://localhost:8090/clients.php (Browse & search)
+- **Add Client**: http://localhost:8090/add_client.php (Create new)
+- **Products**: http://localhost:8090/products.php (Product catalog)
+- **Add Product**: http://localhost:8090/add_product.php (Create new)
+- **Employees**: http://localhost:8090/employees.php (Staff directory)
+- **Add Employee**: http://localhost:8090/add_employee.php (Create new)
+- **Invoices**: http://localhost:8090/invoices.php (Invoice management)
+- **Client Types**: http://localhost:8090/client_types.php (Category management)
+- **Product Types**: http://localhost:8090/product_types.php (Category management)
 
 ### 🎯 **What You Can Now Do:**
 1. **Browse** all data with search and pagination
@@ -1309,11 +1309,11 @@ Ran terminal command: docker-compose exec web-app curl -s http://localhost/invoi
 
 Excellent! Let me test the pages in the browser to make sure they're working correctly: 
 
-Opened Simple Browser at http://localhost:8080/products.php
+Opened Simple Browser at http://localhost:8090/products.php
 
-Opened Simple Browser at http://localhost:8080/employees.php
+Opened Simple Browser at http://localhost:8090/employees.php
 
-Opened Simple Browser at http://localhost:8080/invoices.php
+Opened Simple Browser at http://localhost:8090/invoices.php
 
 Let me also check if the Apache error logs show that the errors are resolved: 
 

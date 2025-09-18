@@ -64,7 +64,7 @@ A modern PHP web application that connects to Oracle Database XE 21c, built with
    - PHP Web App: Available once database is healthy
 
 4. **Access the application**
-   - Web Application: http://localhost:8080
+   - Web Application: http://localhost:8090
    - Oracle EM Express: http://localhost:5501/em
    - Database Port: localhost:1522
 
@@ -173,7 +173,7 @@ The application includes several pre-created tables:
 
 3. **PHP Oracle extensions not loaded**
    - Rebuild the web application: `docker-compose build web-app`
-   - Check PHP configuration: Visit http://localhost:8080/database_info.php
+   - Check PHP configuration: Visit http://localhost:8090/database_info.php
 
 ### Useful Commands
 

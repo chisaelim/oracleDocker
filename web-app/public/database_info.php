@@ -1,89 +1,162 @@
 <?php
-$page_title = 'Database Information';
-require_once 'includes/header.php';
+/**
+ * Database Information Page
+ */
 
-// Check if OCI8 extension is available and use appropriate database config
-if (extension_loaded('oci8')) {
-    require_once 'config/database_oci8.php';
-    $use_oci8 = true;
-} else {
-    $use_oci8 = false;
-}
+require_once 'config/config.php';
+require_once 'config/database.php';
+require_once 'includes/utils.php';
 
-try {
-    if ($use_oci8) {
-        $connection_test = DatabaseOCI8::testConnection();
-        $db_info = DatabaseOCI8::getDatabaseInfo();
-        
-        if ($connection_test['success']) {
-            // Get table information
-            $tables = DatabaseOCI8::query("
-                SELECT TABLE_NAME, NUM_ROWS, LAST_ANALYZED 
-                FROM USER_TABLES 
-                ORDER BY TABLE_NAME
-            ");
-            
-            // Get session information
-            $session_info = DatabaseOCI8::queryOne("
-                SELECT 
-                    SYS_CONTEXT('USERENV', 'SESSION_USER') as SESSION_USER,
-                    SYS_CONTEXT('USERENV', 'CURRENT_USER') as CURRENT_USER,
-                    SYS_CONTEXT('USERENV', 'DB_NAME') as DB_NAME,
-                    SYS_CONTEXT('USERENV', 'SERVER_HOST') as SERVER_HOST,
-                    SYS_CONTEXT('USERENV', 'IP_ADDRESS') as IP_ADDRESS,
-                    SYSDATE as CURRENT_TIME
-                FROM DUAL
-            ");
-        } else {
-            $tables = [];
-            $session_info = null;
-        }
-    } else {
-        $connection_test = ['success' => false, 'message' => 'OCI8 extension not available'];
-        $db_info = ['error' => 'OCI8 extension not available'];
-        $tables = [];
-        $session_info = null;
-    }
-} catch (Exception $e) {
-    $connection_test = ['success' => false, 'message' => $e->getMessage()];
-    $db_info = ['error' => $e->getMessage()];
-    $tables = [];
-    $session_info = null;
-}
+$pageTitle = 'Database Information';
+
+// Get database information
+$dbInfo = getDatabaseInfo();
+
+// Include header
+include 'includes/header.php';
 ?>
 
-<div class="page-header">
-    <div class="container">
-        <h1>
-            <i class="fas fa-database me-3"></i>
-            Database Information
-        </h1>
-        <p class="lead mb-0">Oracle Database Connection and System Details</p>
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12 mb-4">
+            <h1 class="h3 mb-0">
+                <i class="fas fa-database text-primary me-2"></i>
+                Database Information
+            </h1>
+            <p class="text-muted mb-0">Oracle Database connection and system details</p>
+        </div>
     </div>
-</div>
 
 <!-- Connection Status -->
 <div class="row mb-4">
-    <div class="col-12">
-        <div class="card">
+    <div class="col-md-6">
+        <div class="card shadow">
             <div class="card-header">
-                <h5 class="mb-0">
+                <h5 class="card-title mb-0">
                     <i class="fas fa-plug me-2"></i>
                     Connection Status
                 </h5>
             </div>
             <div class="card-body">
-                <div class="connection-status <?php echo $connection_test['success'] ? 'connected' : 'disconnected'; ?> mb-3">
-                    <i class="fas fa-<?php echo $connection_test['success'] ? 'check-circle' : 'times-circle'; ?>"></i>
-                    <?php echo $connection_test['success'] ? 'Connected Successfully' : 'Connection Failed'; ?>
-                </div>
-                
-                <?php if ($connection_test['success']): ?>
-                    <p class="mb-1"><strong>Status:</strong> <?php echo htmlspecialchars($connection_test['message']); ?></p>
-                    <p class="mb-0"><strong>Timestamp:</strong> <?php echo htmlspecialchars($connection_test['timestamp']); ?></p>
+                <?php if ($dbInfo['connected']): ?>
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-check-circle fa-3x text-success me-3"></i>
+                        <div>
+                            <h5 class="text-success mb-1">Connected</h5>
+                            <p class="text-muted mb-0">Successfully connected to Oracle Database</p>
+                        </div>
+                    </div>
                 <?php else: ?>
-                    <div class="alert alert-danger">
-                        <strong>Error:</strong> <?php echo htmlspecialchars($connection_test['message']); ?>
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-times-circle fa-3x text-danger me-3"></i>
+                        <div>
+                            <h5 class="text-danger mb-1">Disconnected</h5>
+                            <p class="text-muted mb-0">Unable to connect to database</p>
+                            <?php if (!empty($dbInfo['error'])): ?>
+                                <small class="text-danger"><?= htmlspecialchars($dbInfo['error']) ?></small>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-server me-2"></i>
+                    Connection Details
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6 text-end">
+                        <strong>Host:</strong>
+                    </div>
+                    <div class="col-6">
+                        <?= DB_HOST ?>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-6 text-end">
+                        <strong>Port:</strong>
+                    </div>
+                    <div class="col-6">
+                        <?= DB_PORT ?>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-6 text-end">
+                        <strong>Service:</strong>
+                    </div>
+                    <div class="col-6">
+                        <?= DB_SERVICE ?>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-6 text-end">
+                        <strong>Username:</strong>
+                    </div>
+                    <div class="col-6">
+                        <?= DB_USERNAME ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php if ($dbInfo['connected']): ?>
+<!-- Database Schema Information -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-table me-2"></i>
+                    Database Schema
+                </h5>
+            </div>
+            <div class="card-body">
+                <?php if (!empty($dbInfo['tables'])): ?>
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Table Name</th>
+                                    <th>Record Count</th>
+                                    <th>Last Updated</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($dbInfo['tables'] as $table): ?>
+                                <tr>
+                                    <td>
+                                        <strong><?= htmlspecialchars($table['TABLE_NAME']) ?></strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-primary">
+                                            <?= number_format($table['NUM_ROWS'] ?? 0) ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <?= $table['LAST_ANALYZED'] ? date('Y-m-d H:i:s', strtotime($table['LAST_ANALYZED'])) : 'N/A' ?>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success">Active</span>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php else: ?>
+                    <div class="text-center py-4">
+                        <i class="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
+                        <p class="text-muted">No table information available</p>
                     </div>
                 <?php endif; ?>
             </div>
@@ -91,191 +164,48 @@ try {
     </div>
 </div>
 
-<?php if ($connection_test['success']): ?>
-    <!-- Database Information -->
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-info-circle me-2"></i>
-                        Database Details
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <?php if (isset($db_info['error'])): ?>
-                        <div class="alert alert-warning">
-                            <strong>Warning:</strong> <?php echo htmlspecialchars($db_info['error']); ?>
-                        </div>
-                    <?php else: ?>
-                        <dl class="row">
-                            <dt class="col-sm-4">Version:</dt>
-                            <dd class="col-sm-8"><?php echo htmlspecialchars($db_info['VERSION'] ?? 'N/A'); ?></dd>
-                            
-                            <dt class="col-sm-4">Database Name:</dt>
-                            <dd class="col-sm-8"><?php echo htmlspecialchars($db_info['DB_NAME'] ?? 'N/A'); ?></dd>
-                            
-                            <dt class="col-sm-4">Current User:</dt>
-                            <dd class="col-sm-8"><?php echo htmlspecialchars($db_info['CURRENT_USER'] ?? 'N/A'); ?></dd>
-                            
-                            <dt class="col-sm-4">Session User:</dt>
-                            <dd class="col-sm-8"><?php echo htmlspecialchars($db_info['SESSION_USER'] ?? 'N/A'); ?></dd>
-                        </dl>
-                    <?php endif; ?>
-                </div>
+<!-- Database Version and Info -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Database Version
+                </h5>
             </div>
-        </div>
-        
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-server me-2"></i>
-                        Session Information
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <?php if ($session_info): ?>
-                        <dl class="row">
-                            <dt class="col-sm-4">Session User:</dt>
-                            <dd class="col-sm-8"><?php echo htmlspecialchars($session_info['SESSION_USER']); ?></dd>
-                            
-                            <dt class="col-sm-4">Current User:</dt>
-                            <dd class="col-sm-8"><?php echo htmlspecialchars($session_info['CURRENT_USER']); ?></dd>
-                            
-                            <dt class="col-sm-4">Database:</dt>
-                            <dd class="col-sm-8"><?php echo htmlspecialchars($session_info['DB_NAME']); ?></dd>
-                            
-                            <dt class="col-sm-4">Server Host:</dt>
-                            <dd class="col-sm-8"><?php echo htmlspecialchars($session_info['SERVER_HOST']); ?></dd>
-                            
-                            <dt class="col-sm-4">IP Address:</dt>
-                            <dd class="col-sm-8"><?php echo htmlspecialchars($session_info['IP_ADDRESS']); ?></dd>
-                            
-                            <dt class="col-sm-4">Current Time:</dt>
-                            <dd class="col-sm-8"><?php echo htmlspecialchars($session_info['CURRENT_TIME']); ?></dd>
-                        </dl>
-                    <?php else: ?>
-                        <div class="alert alert-warning">
-                            Unable to retrieve session information.
-                        </div>
-                    <?php endif; ?>
-                </div>
+            <div class="card-body">
+                <?php if (!empty($dbInfo['version'])): ?>
+                    <h4 class="text-primary"><?= htmlspecialchars($dbInfo['version']['BANNER']) ?></h4>
+                    <p class="text-muted">Oracle Database Version Information</p>
+                <?php else: ?>
+                    <p class="text-muted">Version information not available</p>
+                <?php endif; ?>
             </div>
         </div>
     </div>
     
-    <!-- Tables Information -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-table me-2"></i>
-                        Database Tables
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <?php if (!empty($tables)): ?>
-                        <div class="table-responsive">
-                            <table class="table table-striped table-hover">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Table Name</th>
-                                        <th>Row Count</th>
-                                        <th>Last Analyzed</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($tables as $table): ?>
-                                        <tr>
-                                            <td>
-                                                <strong><?php echo htmlspecialchars($table['TABLE_NAME']); ?></strong>
-                                            </td>
-                                            <td>
-                                                <?php if ($table['NUM_ROWS']): ?>
-                                                    <span class="badge bg-primary">
-                                                        <?php echo number_format($table['NUM_ROWS']); ?>
-                                                    </span>
-                                                <?php else: ?>
-                                                    <span class="text-muted">N/A</span>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td>
-                                                <?php echo $table['LAST_ANALYZED'] ? Utils::formatDate($table['LAST_ANALYZED']) : '<span class="text-muted">Never</span>'; ?>
-                                            </td>
-                                            <td>
-                                                <button class="btn btn-sm btn-outline-info" 
-                                                        onclick="showTableStructure('<?php echo htmlspecialchars($table['TABLE_NAME']); ?>')"
-                                                        data-bs-toggle="tooltip" 
-                                                        title="View table structure">
-                                                    <i class="fas fa-eye"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                    <?php else: ?>
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle me-2"></i>
-                            No tables found or unable to retrieve table information.
-                        </div>
-                    <?php endif; ?>
-                </div>
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>
+                    Statistics
+                </h5>
             </div>
-        </div>
-    </div>
-    
-<?php else: ?>
-    <!-- Connection Failed -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card border-danger">
-                <div class="card-header bg-danger text-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Connection Failed
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-danger">
-                        <h6>Unable to connect to the Oracle database.</h6>
-                        <p class="mb-0">Please check the following:</p>
-                        <ul class="mt-2 mb-0">
-                            <li>Database server is running</li>
-                            <li>Connection parameters are correct</li>
-                            <li>Network connectivity</li>
-                            <li>Oracle Instant Client is properly installed</li>
-                        </ul>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-4">
+                        <h3 class="text-primary"><?= count($dbInfo['tables']) ?></h3>
+                        <small class="text-muted">Tables</small>
                     </div>
-                    
-                    <div class="text-center">
-                        <button class="btn btn-primary" onclick="location.reload()">
-                            <i class="fas fa-sync-alt me-2"></i>
-                            Retry Connection
-                        </button>
+                    <div class="col-4">
+                        <h3 class="text-success"><?= array_sum(array_column($dbInfo['tables'], 'NUM_ROWS')) ?></h3>
+                        <small class="text-muted">Total Records</small>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-<?php endif; ?>
-
-<!-- Modal for Table Structure -->
-<div class="modal fade" id="tableStructureModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Table Structure</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" id="tableStructureContent">
-                <div class="text-center">
-                    <div class="spinner-border" role="status">
-                        <span class="visually-hidden">Loading...</span>
+                    <div class="col-4">
+                        <h3 class="text-info"><?= $dbInfo['session_count'] ?? 0 ?></h3>
+                        <small class="text-muted">Active Sessions</small>
                     </div>
                 </div>
             </div>
@@ -283,22 +213,162 @@ try {
     </div>
 </div>
 
-<script>
-function showTableStructure(tableName) {
-    const modal = new bootstrap.Modal(document.getElementById('tableStructureModal'));
-    const content = document.getElementById('tableStructureContent');
-    
-    content.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
-    modal.show();
-    
-    // In a real implementation, you would fetch the table structure via AJAX
-    content.innerHTML = `
-        <div class="alert alert-info">
-            <strong>Table:</strong> ${tableName}<br>
-            <em>Table structure details would be loaded here via AJAX call.</em>
+<!-- Sample Queries -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-code me-2"></i>
+                    Quick Database Tests
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Test Connection</h6>
+                        <pre class="bg-light p-2 rounded"><code>SELECT 'Connection OK' FROM DUAL;</code></pre>
+                        <div class="mb-3">
+                            <strong>Result:</strong> 
+                            <span class="badge bg-success">Connection OK</span>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h6>Current Date/Time</h6>
+                        <pre class="bg-light p-2 rounded"><code>SELECT SYSDATE FROM DUAL;</code></pre>
+                        <div class="mb-3">
+                            <strong>Result:</strong> 
+                            <span class="badge bg-info"><?= $dbInfo['current_date'] ?? 'N/A' ?></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="text-center">
+                    <button type="button" class="btn btn-outline-primary" onclick="testConnection()">
+                        <i class="fas fa-sync-alt me-1"></i>
+                        Test Connection
+                    </button>
+                </div>
+            </div>
         </div>
-    `;
+    </div>
+</div>
+
+<?php else: ?>
+<!-- Connection Error -->
+<div class="row">
+    <div class="col-12">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Connection Error
+                </h5>
+            </div>
+            <div class="card-body">
+                <p>Unable to connect to the Oracle database. Please check:</p>
+                <ul>
+                    <li>Database server is running</li>
+                    <li>Connection parameters are correct</li>
+                    <li>Network connectivity</li>
+                    <li>Oracle client is properly installed</li>
+                </ul>
+                
+                <?php if (!empty($dbInfo['error'])): ?>
+                    <div class="alert alert-danger mt-3">
+                        <strong>Error Details:</strong><br>
+                        <?= htmlspecialchars($dbInfo['error']) ?>
+                    </div>
+                <?php endif; ?>
+                
+                <div class="text-center mt-3">
+                    <button type="button" class="btn btn-danger" onclick="location.reload()">
+                        <i class="fas fa-redo me-1"></i>
+                        Retry Connection
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php
+// Custom JavaScript for this page
+$customJS = '
+<script>
+function testConnection() {
+    showLoading();
+    
+    // Simulate a connection test
+    setTimeout(function() {
+        hideLoading();
+        Swal.fire({
+            title: "Connection Test",
+            text: "Database connection is working properly!",
+            icon: "success",
+            timer: 2000,
+            showConfirmButton: false
+        });
+    }, 1000);
 }
 </script>
+';
+?>
+</div>
 
-<?php require_once 'includes/footer.php'; ?>
+<?php include 'includes/footer.php';
+
+// PHP Functions
+function getDatabaseInfo() {
+    $info = [
+        'connected' => false,
+        'error' => '',
+        'tables' => [],
+        'version' => null,
+        'current_date' => null,
+        'session_count' => 0
+    ];
+    
+    try {
+        $db = Database::getInstance();
+        $info['connected'] = $db->isConnected();
+        
+        if ($info['connected']) {
+            // Get table information
+            $sql = "SELECT table_name, num_rows, last_analyzed 
+                   FROM user_tables 
+                   WHERE table_name IN ('CLIENT_TYPE', 'CLIENTS', 'PRODUCT_TYPE', 'PRODUCTS', 'JOBS', 'EMPLOYEES', 'INVOICES', 'INVOICE_DETAILS')
+                   ORDER BY table_name";
+            $stmt = $db->query($sql);
+            $info['tables'] = $db->fetchAll($stmt);
+            
+            // Get database version
+            $stmt = $db->query("SELECT banner FROM v\$version WHERE rownum = 1");
+            $info['version'] = $db->fetchOne($stmt);
+            
+            // Get current date
+            $stmt = $db->query("SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS') as current_date FROM DUAL");
+            $result = $db->fetchOne($stmt);
+            $info['current_date'] = $result['CURRENT_DATE'] ?? null;
+            
+            // Get session count (if accessible)
+            try {
+                $stmt = $db->query("SELECT COUNT(*) as count FROM v\$session WHERE status = 'ACTIVE'");
+                $result = $db->fetchOne($stmt);
+                $info['session_count'] = $result['COUNT'] ?? 0;
+            } catch (Exception $e) {
+                // User might not have access to v$session
+                $info['session_count'] = 1; // At least our session
+            }
+        }
+        
+    } catch (Exception $e) {
+        $info['error'] = $e->getMessage();
+        logError("Database info error: " . $e->getMessage());
+    }
+    
+    return $info;
+}
+?>

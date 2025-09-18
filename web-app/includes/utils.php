@@ -1,172 +1,153 @@
 <?php
-// Utility functions for the application
-class Utils {
+/**
+ * Common utility functions
+ */
+
+/**
+ * Sanitize input data
+ */
+function sanitizeInput($data) {
+    if (is_array($data)) {
+        return array_map('sanitizeInput', $data);
+    }
+    return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Validate required fields
+ */
+function validateRequired($data, $required_fields) {
+    $errors = [];
+    foreach ($required_fields as $field) {
+        if (empty($data[$field])) {
+            $errors[] = ucfirst(str_replace('_', ' ', $field)) . ' is required';
+        }
+    }
+    return $errors;
+}
+
+/**
+ * Generate CSRF token
+ */
+function generateCSRFToken() {
+    if (!isset($_SESSION[CSRF_TOKEN_NAME])) {
+        $_SESSION[CSRF_TOKEN_NAME] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION[CSRF_TOKEN_NAME];
+}
+
+/**
+ * Verify CSRF token
+ */
+function verifyCSRFToken($token) {
+    return isset($_SESSION[CSRF_TOKEN_NAME]) && hash_equals($_SESSION[CSRF_TOKEN_NAME], $token);
+}
+
+/**
+ * Set flash message
+ */
+function setFlashMessage($message, $type = 'info') {
+    $_SESSION['flash_message'] = [
+        'message' => $message,
+        'type' => $type
+    ];
+}
+
+/**
+ * Format currency
+ */
+function formatCurrency($amount) {
+    return '$' . number_format($amount, 2);
+}
+
+/**
+ * Format percentage
+ */
+function formatPercentage($value) {
+    return number_format($value, 2) . '%';
+}
+
+/**
+ * Generate pagination
+ */
+function generatePagination($current_page, $total_pages, $base_url) {
+    $pagination = '';
     
-    /**
-     * Sanitize input data
-     * @param string $data
-     * @return string
-     */
-    public static function sanitizeInput($data) {
-        $data = trim($data);
-        $data = stripslashes($data);
-        $data = htmlspecialchars($data);
-        return $data;
+    if ($total_pages <= 1) {
+        return $pagination;
     }
     
-    /**
-     * Format currency
-     * @param float $amount
-     * @param string $currency
-     * @return string
-     */
-    public static function formatCurrency($amount, $currency = '$') {
-        return $currency . number_format($amount, 2);
+    $pagination .= '<nav aria-label="Page navigation">';
+    $pagination .= '<ul class="pagination justify-content-center">';
+    
+    // Previous button
+    if ($current_page > 1) {
+        $pagination .= '<li class="page-item">';
+        $pagination .= '<a class="page-link" href="' . $base_url . '?page=' . ($current_page - 1) . '">';
+        $pagination .= '<i class="fas fa-chevron-left"></i> Previous</a>';
+        $pagination .= '</li>';
     }
     
-    /**
-     * Format date
-     * @param string $date
-     * @param string $format
-     * @return string
-     */
-    public static function formatDate($date, $format = 'Y-m-d H:i:s') {
-        if (!$date) return '';
-        return date($format, strtotime($date));
+    // Page numbers
+    $start = max(1, $current_page - 2);
+    $end = min($total_pages, $current_page + 2);
+    
+    for ($i = $start; $i <= $end; $i++) {
+        $active = ($i == $current_page) ? ' active' : '';
+        $pagination .= '<li class="page-item' . $active . '">';
+        $pagination .= '<a class="page-link" href="' . $base_url . '?page=' . $i . '">' . $i . '</a>';
+        $pagination .= '</li>';
     }
     
-    /**
-     * Generate pagination
-     * @param int $currentPage
-     * @param int $totalPages
-     * @param string $baseUrl
-     * @return string
-     */
-    public static function generatePagination($currentPage, $totalPages, $baseUrl) {
-        if ($totalPages <= 1) return '';
-        
-        $html = '<nav aria-label="Page navigation"><ul class="pagination justify-content-center">';
-        
-        // Previous button
-        if ($currentPage > 1) {
-            $prevPage = $currentPage - 1;
-            $html .= '<li class="page-item"><a class="page-link" href="' . $baseUrl . '&page=' . $prevPage . '">Previous</a></li>';
-        } else {
-            $html .= '<li class="page-item disabled"><span class="page-link">Previous</span></li>';
-        }
-        
-        // Page numbers
-        $start = max(1, $currentPage - 2);
-        $end = min($totalPages, $currentPage + 2);
-        
-        if ($start > 1) {
-            $html .= '<li class="page-item"><a class="page-link" href="' . $baseUrl . '&page=1">1</a></li>';
-            if ($start > 2) {
-                $html .= '<li class="page-item disabled"><span class="page-link">...</span></li>';
-            }
-        }
-        
-        for ($i = $start; $i <= $end; $i++) {
-            if ($i == $currentPage) {
-                $html .= '<li class="page-item active"><span class="page-link">' . $i . '</span></li>';
-            } else {
-                $html .= '<li class="page-item"><a class="page-link" href="' . $baseUrl . '&page=' . $i . '">' . $i . '</a></li>';
-            }
-        }
-        
-        if ($end < $totalPages) {
-            if ($end < $totalPages - 1) {
-                $html .= '<li class="page-item disabled"><span class="page-link">...</span></li>';
-            }
-            $html .= '<li class="page-item"><a class="page-link" href="' . $baseUrl . '&page=' . $totalPages . '">' . $totalPages . '</a></li>';
-        }
-        
-        // Next button
-        if ($currentPage < $totalPages) {
-            $nextPage = $currentPage + 1;
-            $html .= '<li class="page-item"><a class="page-link" href="' . $baseUrl . '&page=' . $nextPage . '">Next</a></li>';
-        } else {
-            $html .= '<li class="page-item disabled"><span class="page-link">Next</span></li>';
-        }
-        
-        $html .= '</ul></nav>';
-        return $html;
+    // Next button
+    if ($current_page < $total_pages) {
+        $pagination .= '<li class="page-item">';
+        $pagination .= '<a class="page-link" href="' . $base_url . '?page=' . ($current_page + 1) . '">';
+        $pagination .= 'Next <i class="fas fa-chevron-right"></i></a>';
+        $pagination .= '</li>';
     }
     
-    /**
-     * Set success message
-     * @param string $message
-     */
-    public static function setSuccessMessage($message) {
-        $_SESSION['success_message'] = $message;
-    }
+    $pagination .= '</ul>';
+    $pagination .= '</nav>';
     
-    /**
-     * Set error message
-     * @param string $message
-     */
-    public static function setErrorMessage($message) {
-        $_SESSION['error_message'] = $message;
+    return $pagination;
+}
+
+/**
+ * Log error message
+ */
+function logError($message, $context = []) {
+    $log_message = date('Y-m-d H:i:s') . ' - ' . $message;
+    if (!empty($context)) {
+        $log_message .= ' - Context: ' . json_encode($context);
     }
-    
-    /**
-     * Redirect to a page
-     * @param string $url
-     */
-    public static function redirect($url) {
-        header("Location: $url");
-        exit();
-    }
-    
-    /**
-     * Generate a simple table from array data
-     * @param array $data
-     * @param array $headers
-     * @param array $actions
-     * @return string
-     */
-    public static function generateTable($data, $headers, $actions = []) {
-        if (empty($data)) {
-            return '<div class="alert alert-info">No data found.</div>';
-        }
-        
-        $html = '<div class="table-responsive"><table class="table table-striped table-hover">';
-        
-        // Headers
-        $html .= '<thead class="table-dark"><tr>';
-        foreach ($headers as $header) {
-            $html .= '<th>' . htmlspecialchars($header) . '</th>';
-        }
-        if (!empty($actions)) {
-            $html .= '<th>Actions</th>';
-        }
-        $html .= '</tr></thead>';
-        
-        // Body
-        $html .= '<tbody>';
-        foreach ($data as $row) {
-            $html .= '<tr>';
-            foreach ($headers as $key => $header) {
-                $value = $row[strtoupper($key)] ?? $row[$key] ?? '';
-                $html .= '<td>' . htmlspecialchars($value) . '</td>';
-            }
-            
-            // Actions
-            if (!empty($actions)) {
-                $html .= '<td>';
-                foreach ($actions as $action) {
-                    $url = str_replace('{id}', $row['ID'] ?? $row[array_keys($row)[0]], $action['url']);
-                    $class = $action['class'] ?? 'btn btn-sm btn-outline-primary';
-                    $html .= '<a href="' . $url . '" class="' . $class . ' me-1">' . $action['label'] . '</a>';
-                }
-                $html .= '</td>';
-            }
-            
-            $html .= '</tr>';
-        }
-        $html .= '</tbody></table></div>';
-        
-        return $html;
-    }
+    error_log($log_message);
+}
+
+/**
+ * Check if request is AJAX
+ */
+function isAjaxRequest() {
+    return isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
+           strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+}
+
+/**
+ * Send JSON response
+ */
+function sendJsonResponse($data, $status_code = 200) {
+    http_response_code($status_code);
+    header('Content-Type: application/json');
+    echo json_encode($data);
+    exit;
+}
+
+/**
+ * Redirect with message
+ */
+function redirectWithMessage($url, $message, $type = 'success') {
+    setFlashMessage($message, $type);
+    header('Location: ' . $url);
+    exit;
 }
 ?>
