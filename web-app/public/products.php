@@ -5,11 +5,6 @@ require_once 'config/database.php';
 require_once 'includes/header.php';
 require_once 'includes/utils.php';
 
-// Handle image display requests (must come before other handlers)
-if (isset($_GET['action']) && $_GET['action'] === 'image' && isset($_GET['product_no'])) {
-    displayProductImage($_GET['product_no'], isset($_GET['thumbnail']));
-    exit;
-}
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -31,14 +26,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'edit' && isset($_GET['id'])) 
 $products = getAllProducts();
 $productTypes = getAllProductTypes();
 
-function handleFormSubmission() {
+function handleFormSubmission()
+{
     if (!verifyCSRFToken($_POST['csrf_token'])) {
         setFlashMessage('Invalid request. Please try again.', 'danger');
         return;
     }
-    
+
     $action = $_POST['action'];
-    
+
     if ($action === 'create') {
         createProduct($_POST, $_FILES);
     } elseif ($action === 'update') {
@@ -46,10 +42,11 @@ function handleFormSubmission() {
     }
 }
 
-function handleDelete($productNo) {
+function handleDelete($productNo)
+{
     try {
         $db = Database::getInstance();
-        
+
         // Get the image filename before deleting
         $imageSql = "SELECT PHOTO FROM Products WHERE PRODUCT_NO = :product_no";
         $imageStmt = oci_parse($db->getConnection(), $imageSql);
@@ -57,16 +54,16 @@ function handleDelete($productNo) {
         oci_execute($imageStmt);
         $imageResult = oci_fetch_assoc($imageStmt);
         oci_free_statement($imageStmt);
-        
+
         // Delete the product
         $sql = "DELETE FROM Products WHERE PRODUCT_NO = :product_no";
         $stmt = oci_parse($db->getConnection(), $sql);
         oci_bind_by_name($stmt, ':product_no', $productNo);
-        
+
         if (oci_execute($stmt)) {
             // Delete the image file if it exists
             if ($imageResult && !empty($imageResult['PHOTO'])) {
-                $imagePath = 'assets/imgs/' . $imageResult['PHOTO'];
+                $imagePath = 'uploads/products/' . $imageResult['PHOTO'];
                 if (file_exists($imagePath)) {
                     unlink($imagePath);
                 }
@@ -76,18 +73,19 @@ function handleDelete($productNo) {
             $error = oci_error($stmt);
             setFlashMessage('Error deleting product: ' . $error['message'], 'danger');
         }
-        
+
         oci_free_statement($stmt);
-        
+
     } catch (Exception $e) {
         setFlashMessage('Error: ' . $e->getMessage(), 'danger');
     }
-    
+
     header('Location: products.php');
     exit();
 }
 
-function getProductById($productNo) {
+function getProductById($productNo)
+{
     try {
         $db = Database::getInstance();
         $sql = "SELECT p.PRODUCT_NO, p.PRODUCTNAME, p.PRODUCTTYPE, p.PROFIT_PERCENT, 
@@ -96,15 +94,15 @@ function getProductById($productNo) {
                 FROM Products p
                 LEFT JOIN Product_Type pt ON p.PRODUCTTYPE = pt.PRODUCTTYPE_ID
                 WHERE p.PRODUCT_NO = :product_no";
-        
+
         $stmt = oci_parse($db->getConnection(), $sql);
         oci_bind_by_name($stmt, ':product_no', $productNo);
         oci_execute($stmt);
         $result = oci_fetch_assoc($stmt);
         oci_free_statement($stmt);
-        
+
         return $result;
-        
+
     } catch (Exception $e) {
         setFlashMessage('Error fetching product: ' . $e->getMessage(), 'danger');
         return null;
@@ -124,15 +122,15 @@ function getAllProducts()
 
         $stmt = oci_parse($db->getConnection(), $sql);
         oci_execute($stmt);
-        
+
         $products = [];
         while ($row = oci_fetch_assoc($stmt)) {
             $products[] = $row;
         }
-        
+
         oci_free_statement($stmt);
         return $products;
-        
+
     } catch (Exception $e) {
         setFlashMessage('Error fetching products: ' . $e->getMessage(), 'danger');
         return [];
@@ -144,32 +142,33 @@ function getAllProductTypes()
     try {
         $db = Database::getInstance();
         $sql = "SELECT PRODUCTTYPE_ID, PRODUCTTYPE_NAME FROM Product_Type ORDER BY PRODUCTTYPE_NAME";
-        
+
         $stmt = oci_parse($db->getConnection(), $sql);
         oci_execute($stmt);
-        
+
         $productTypes = [];
         while ($row = oci_fetch_assoc($stmt)) {
             $productTypes[] = $row;
         }
-        
+
         oci_free_statement($stmt);
         return $productTypes;
-        
+
     } catch (Exception $e) {
         setFlashMessage('Error fetching product types: ' . $e->getMessage(), 'danger');
         return [];
     }
 }
 
-function createProduct($data, $files) {
+function createProduct($data, $files)
+{
     try {
         // Validate required fields
         if (empty($data['product_no']) || empty($data['product_name']) || empty($data['product_type'])) {
             setFlashMessage('Please fill in all required fields.', 'danger');
             return;
         }
-        
+
         // Extract and validate data
         $productNo = trim($data['product_no']);
         $productName = trim($data['product_name']);
@@ -179,25 +178,25 @@ function createProduct($data, $files) {
         $sellPrice = floatval($data['sell_price'] ?? 0);
         $costPrice = floatval($data['cost_price'] ?? 0);
         $qtyOnHand = (int) ($data['qty_on_hand'] ?? 0);
-        
+
         // Validation
         if (strlen($productNo) > 20) {
             setFlashMessage('Product Number must be 20 characters or less.', 'danger');
             return;
         }
-        
+
         if (strlen($productName) > 50) {
             setFlashMessage('Product Name must be 50 characters or less.', 'danger');
             return;
         }
-        
+
         if ($sellPrice < 0 || $costPrice < 0) {
             setFlashMessage('Prices cannot be negative.', 'danger');
             return;
         }
-        
+
         $db = Database::getInstance();
-        
+
         // Check if product number already exists
         $checkSql = "SELECT COUNT(*) as count FROM Products WHERE UPPER(PRODUCT_NO) = UPPER(:product_no)";
         $checkStmt = oci_parse($db->getConnection(), $checkSql);
@@ -265,23 +264,24 @@ function createProduct($data, $files) {
         }
 
         oci_free_statement($stmt);
-        
+
     } catch (Exception $e) {
         setFlashMessage('Error: ' . $e->getMessage(), 'danger');
     }
-    
+
     header('Location: products.php');
     exit();
 }
 
-function updateProduct($data, $files) {
+function updateProduct($data, $files)
+{
     try {
         // Validate required fields
         if (empty($data['product_no']) || empty($data['product_name']) || empty($data['product_type']) || empty($data['original_product_no'])) {
             setFlashMessage('Please fill in all required fields.', 'danger');
             return;
         }
-        
+
         // Extract and validate data
         $productNo = trim($data['product_no']);
         $productName = trim($data['product_name']);
@@ -292,25 +292,25 @@ function updateProduct($data, $files) {
         $costPrice = floatval($data['cost_price'] ?? 0);
         $qtyOnHand = (int) ($data['qty_on_hand'] ?? 0);
         $originalProductNo = trim($data['original_product_no']);
-        
+
         // Validation
         if (strlen($productNo) > 20) {
             setFlashMessage('Product Number must be 20 characters or less.', 'danger');
             return;
         }
-        
+
         if (strlen($productName) > 50) {
             setFlashMessage('Product Name must be 50 characters or less.', 'danger');
             return;
         }
-        
+
         if ($sellPrice < 0 || $costPrice < 0) {
             setFlashMessage('Prices cannot be negative.', 'danger');
             return;
         }
-        
+
         $db = Database::getInstance();
-        
+
         // Check if product number already exists (excluding current record)
         if ($productNo !== $originalProductNo) {
             $checkSql = "SELECT COUNT(*) as count FROM Products WHERE UPPER(PRODUCT_NO) = UPPER(:product_no)";
@@ -365,7 +365,7 @@ function updateProduct($data, $files) {
 
             // Delete old image file if it exists
             if ($oldImageResult && $oldImageResult['PHOTO'] && !empty($oldImageResult['PHOTO'])) {
-                $oldImagePath = 'assets/imgs/' . $oldImageResult['PHOTO'];
+                $oldImagePath = 'uploads/products/' . $oldImageResult['PHOTO'];
                 if (file_exists($oldImagePath)) {
                     unlink($oldImagePath);
                 }
@@ -416,11 +416,11 @@ function updateProduct($data, $files) {
         }
 
         oci_free_statement($stmt);
-        
+
     } catch (Exception $e) {
         setFlashMessage('Error: ' . $e->getMessage(), 'danger');
     }
-    
+
     header('Location: products.php');
     exit();
 }
@@ -439,7 +439,7 @@ function processImageUpload($file, $productNo)
     }
 
     // Create upload directory if it doesn't exist
-    $uploadDir = 'assets/imgs/';
+    $uploadDir = 'uploads/products/';
     if (!is_dir($uploadDir)) {
         mkdir($uploadDir, 0755, true);
     }
@@ -457,7 +457,7 @@ function processImageUpload($file, $productNo)
     return $filename;
 }
 
-function displayProductImage($productNo, $thumbnail = false)
+function getProductPhotoPath($productNo)
 {
     $db = Database::getInstance();
 
@@ -470,35 +470,13 @@ function displayProductImage($productNo, $thumbnail = false)
     oci_free_statement($stmt);
 
     if ($result && $result['PHOTO'] && !empty($result['PHOTO'])) {
-        $imagePath = 'assets/imgs/' . $result['PHOTO'];
+        $imagePath = 'uploads/products/' . $result['PHOTO'];
 
         if (file_exists($imagePath)) {
-            // Determine content type from file extension
-            $extension = pathinfo($imagePath, PATHINFO_EXTENSION);
-            $mimeTypes = [
-                'jpg' => 'image/jpeg',
-                'jpeg' => 'image/jpeg',
-                'png' => 'image/png',
-                'gif' => 'image/gif'
-            ];
-
-            $mimeType = $mimeTypes[strtolower($extension)] ?? 'image/jpeg';
-
-            header('Content-Type: ' . $mimeType);
-            header('Content-Length: ' . filesize($imagePath));
-            header('Cache-Control: public, max-age=3600');
-
-            readfile($imagePath);
-            return;
+            return 'uploads/products/' . $result['PHOTO'];
         }
     }
-
-    // Display default no-image placeholder
-    header('Content-Type: image/svg+xml');
-    echo '<svg width="150" height="150" xmlns="http://www.w3.org/2000/svg">
-            <rect width="150" height="150" fill="#f8f9fa"/>
-            <text x="75" y="75" text-anchor="middle" fill="#6c757d" font-family="Arial" font-size="12">No Image</text>
-          </svg>';
+    return 'uploads/empty.png';
 }
 
 // Data already fetched at the top of the file
@@ -546,8 +524,8 @@ function displayProductImage($productNo, $thumbnail = false)
                                     <?php foreach ($products as $product): ?>
                                         <tr>
                                             <td>
-                                                <img src="products.php?action=image&product_no=<?= urlencode($product['PRODUCT_NO']) ?>&thumbnail=1"
-                                                    alt="Product Image" class="product-thumbnail"
+                                                <img src="<?= getProductPhotoPath(htmlspecialchars($product['PRODUCT_NO'])) ?>"
+                                                    alt="Product Image"
                                                     style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">
                                             </td>
                                             <td><?= htmlspecialchars($product['PRODUCT_NO']) ?></td>
@@ -604,7 +582,8 @@ function displayProductImage($productNo, $thumbnail = false)
                 <div class="modal-body">
                     <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                     <input type="hidden" name="action" value="<?= $editProduct ? 'update' : 'create' ?>">
-                    <input type="hidden" name="original_product_no" value="<?= $editProduct ? htmlspecialchars($editProduct['PRODUCT_NO']) : '' ?>">
+                    <input type="hidden" name="original_product_no"
+                        value="<?= $editProduct ? htmlspecialchars($editProduct['PRODUCT_NO']) : '' ?>">
 
                     <div class="row">
                         <div class="col-md-6">
@@ -612,7 +591,8 @@ function displayProductImage($productNo, $thumbnail = false)
                                 <label for="product_no" class="form-label">Product Number <span
                                         class="text-danger">*</span></label>
                                 <input type="text" class="form-control" id="product_no" name="product_no" maxlength="20"
-                                    value="<?= $editProduct ? htmlspecialchars($editProduct['PRODUCT_NO']) : '' ?>" required>
+                                    value="<?= $editProduct ? htmlspecialchars($editProduct['PRODUCT_NO']) : '' ?>"
+                                    required>
                                 <div class="form-text">Unique product identifier (max 20 characters)</div>
                             </div>
                         </div>
@@ -621,7 +601,9 @@ function displayProductImage($productNo, $thumbnail = false)
                                 <label for="product_name" class="form-label">Product Name <span
                                         class="text-danger">*</span></label>
                                 <input type="text" class="form-control" id="product_name" name="product_name"
-                                    maxlength="40" value="<?= $editProduct ? htmlspecialchars($editProduct['PRODUCTNAME']) : '' ?>" required>
+                                    maxlength="40"
+                                    value="<?= $editProduct ? htmlspecialchars($editProduct['PRODUCTNAME']) : '' ?>"
+                                    required>
                                 <div class="form-text">Maximum 40 characters</div>
                             </div>
                         </div>
@@ -647,8 +629,9 @@ function displayProductImage($productNo, $thumbnail = false)
                                 <label for="unit_measure" class="form-label">Unit of Measure <span
                                         class="text-danger">*</span></label>
                                 <input type="text" class="form-control" id="unit_measure" name="unit_measure"
-                                    maxlength="15" placeholder="pieces, kg, liters, etc." 
-                                    value="<?= $editProduct ? htmlspecialchars($editProduct['UNIT_MEASURE']) : '' ?>" required>
+                                    maxlength="15" placeholder="pieces, kg, liters, etc."
+                                    value="<?= $editProduct ? htmlspecialchars($editProduct['UNIT_MEASURE']) : '' ?>"
+                                    required>
                                 <div class="form-text">Maximum 15 characters</div>
                             </div>
                         </div>
@@ -662,7 +645,9 @@ function displayProductImage($productNo, $thumbnail = false)
                                 <div class="input-group">
                                     <span class="input-group-text">$</span>
                                     <input type="number" class="form-control" id="cost_price" name="cost_price" min="0"
-                                        step="0.01" value="<?= $editProduct ? htmlspecialchars($editProduct['COST_PRICE']) : '' ?>" required>
+                                        step="0.01"
+                                        value="<?= $editProduct ? htmlspecialchars($editProduct['COST_PRICE']) : '' ?>"
+                                        required>
                                 </div>
                             </div>
                         </div>
@@ -673,7 +658,9 @@ function displayProductImage($productNo, $thumbnail = false)
                                 <div class="input-group">
                                     <span class="input-group-text">$</span>
                                     <input type="number" class="form-control" id="sell_price" name="sell_price" min="0"
-                                        step="0.01" value="<?= $editProduct ? htmlspecialchars($editProduct['SELL_PRICE']) : '' ?>" required>
+                                        step="0.01"
+                                        value="<?= $editProduct ? htmlspecialchars($editProduct['SELL_PRICE']) : '' ?>"
+                                        required>
                                 </div>
                             </div>
                         </div>
@@ -683,7 +670,9 @@ function displayProductImage($productNo, $thumbnail = false)
                                         class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <input type="number" class="form-control" id="profit_percent" name="profit_percent"
-                                        min="0" max="100" step="0.01" value="<?= $editProduct ? htmlspecialchars($editProduct['PROFIT_PERCENT']) : '' ?>" readonly>
+                                        min="0" max="100" step="0.01"
+                                        value="<?= $editProduct ? htmlspecialchars($editProduct['PROFIT_PERCENT']) : '' ?>"
+                                        readonly>
                                     <span class="input-group-text">%</span>
                                 </div>
                                 <div class="form-text">Auto-calculated from cost and sell price</div>
@@ -704,7 +693,9 @@ function displayProductImage($productNo, $thumbnail = false)
                                 <label for="reorder_level" class="form-label">Reorder Level <span
                                         class="text-danger">*</span></label>
                                 <input type="number" class="form-control" id="reorder_level" name="reorder_level"
-                                    min="0" value="<?= $editProduct ? htmlspecialchars($editProduct['REORDER_LEVEL']) : '' ?>" required>
+                                    min="0"
+                                    value="<?= $editProduct ? htmlspecialchars($editProduct['REORDER_LEVEL']) : '' ?>"
+                                    required>
                                 <div class="form-text">Alert when stock falls below this level</div>
                             </div>
                         </div>
@@ -715,9 +706,11 @@ function displayProductImage($productNo, $thumbnail = false)
                         <input type="file" class="form-control" id="product_image" name="product_image"
                             accept="image/jpeg,image/jpg,image/png,image/gif">
                         <div class="form-text">Optional. Max 5MB. Supported formats: JPG, PNG, GIF</div>
-                        <div id="imagePreview" class="mt-2" style="<?= ($editProduct && $editProduct['PHOTO']) ? 'display: block;' : 'display: none;' ?>">
-                            <img id="previewImg" src="<?= ($editProduct && $editProduct['PHOTO']) ? 'products.php?action=image&product_no=' . urlencode($editProduct['PRODUCT_NO']) : '' ?>" alt="Preview"
-                                style="max-width: 200px; max-height: 200px; border-radius: 4px;">
+                        <div id="imagePreview" class="mt-2"
+                            style="<?= ($editProduct && $editProduct['PHOTO']) ? 'display: block;' : 'display: none;' ?>">
+                            <img id="previewImg"
+                                src="<?= ($editProduct && $editProduct['PHOTO']) ? 'products.php?action=image&product_no=' . urlencode($editProduct['PRODUCT_NO']) : '' ?>"
+                                alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 4px;">
                         </div>
                     </div>
                 </div>
@@ -733,93 +726,93 @@ function displayProductImage($productNo, $thumbnail = false)
 </div>
 
 <?php if ($editProduct): ?>
-<script>
-// Show modal for edit mode
-document.addEventListener('DOMContentLoaded', function() {
-    var modal = new bootstrap.Modal(document.getElementById('productModal'));
-    modal.show();
-});
-</script>
+    <script>
+        // Show modal for edit mode
+        document.addEventListener('DOMContentLoaded', function () {
+            var modal = new bootstrap.Modal(document.getElementById('productModal'));
+            modal.show();
+        });
+    </script>
 <?php endif; ?>
 
 <script>
-function resetForm() {
-    document.getElementById('productForm').reset();
-    document.getElementById('productModalLabel').textContent = 'Add Product';
-    document.querySelector('input[name="action"]').value = 'create';
-    document.querySelector('input[name="original_product_no"]').value = '';
-    document.getElementById('imagePreview').style.display = 'none';
-    calculateProfitPercent();
-}
-
-function editProduct(productNo) {
-    // Make a request to get the product data
-    window.location.href = `products.php?action=edit&id=${encodeURIComponent(productNo)}`;
-}
-
-function confirmDelete(productNo, productName) {
-
-    Swal.fire({
-        title: 'Confirm Deletion',
-        text: `Are you sure you want to delete product "${productName}"?`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Yes, delete it!',
-        cancelButtonText: 'Cancel'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = `products.php?action=delete&product_no=${encodeURIComponent(productNo)}`;
-        }
-    });
-}
-
-// Auto-calculate profit percentage
-function calculateProfitPercent() {
-    const costPrice = parseFloat(document.getElementById('cost_price').value) || 0;
-    const sellPrice = parseFloat(document.getElementById('sell_price').value) || 0;
-    
-    if (costPrice > 0) {
-        const profitPercent = ((sellPrice - costPrice) / costPrice) * 100;
-        document.getElementById('profit_percent').value = profitPercent.toFixed(2);
-    } else {
-        document.getElementById('profit_percent').value = '0.00';
-    }
-}
-
-// Image preview
-function handleImagePreview(input) {
-    const file = input.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            document.getElementById('previewImg').src = e.target.result;
-            document.getElementById('imagePreview').style.display = 'block';
-        };
-        reader.readAsDataURL(file);
-    } else {
+    function resetForm() {
+        document.getElementById('productForm').reset();
+        document.getElementById('productModalLabel').textContent = 'Add Product';
+        document.querySelector('input[name="action"]').value = 'create';
+        document.querySelector('input[name="original_product_no"]').value = '';
         document.getElementById('imagePreview').style.display = 'none';
+        calculateProfitPercent();
     }
-}
 
-// Initialize event listeners
-document.addEventListener('DOMContentLoaded', function() {
-    // Auto-calculate profit on input
-    const costPriceInput = document.getElementById('cost_price');
-    const sellPriceInput = document.getElementById('sell_price');
-    
-    if (costPriceInput) costPriceInput.addEventListener('input', calculateProfitPercent);
-    if (sellPriceInput) sellPriceInput.addEventListener('input', calculateProfitPercent);
-    
-    // Image preview on change
-    const imageInput = document.getElementById('product_image');
-    if (imageInput) {
-        imageInput.addEventListener('change', function() {
-            handleImagePreview(this);
+    function editProduct(productNo) {
+        // Make a request to get the product data
+        window.location.href = `products.php?action=edit&id=${encodeURIComponent(productNo)}`;
+    }
+
+    function confirmDelete(productNo, productName) {
+
+        Swal.fire({
+            title: 'Confirm Deletion',
+            text: `Are you sure you want to delete product "${productName}"?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, delete it!',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                window.location.href = `products.php?action=delete&product_no=${encodeURIComponent(productNo)}`;
+            }
         });
     }
-});
+
+    // Auto-calculate profit percentage
+    function calculateProfitPercent() {
+        const costPrice = parseFloat(document.getElementById('cost_price').value) || 0;
+        const sellPrice = parseFloat(document.getElementById('sell_price').value) || 0;
+
+        if (costPrice > 0) {
+            const profitPercent = ((sellPrice - costPrice) / costPrice) * 100;
+            document.getElementById('profit_percent').value = profitPercent.toFixed(2);
+        } else {
+            document.getElementById('profit_percent').value = '0.00';
+        }
+    }
+
+    // Image preview
+    function handleImagePreview(input) {
+        const file = input.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                document.getElementById('previewImg').src = e.target.result;
+                document.getElementById('imagePreview').style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        } else {
+            document.getElementById('imagePreview').style.display = 'none';
+        }
+    }
+
+    // Initialize event listeners
+    document.addEventListener('DOMContentLoaded', function () {
+        // Auto-calculate profit on input
+        const costPriceInput = document.getElementById('cost_price');
+        const sellPriceInput = document.getElementById('sell_price');
+
+        if (costPriceInput) costPriceInput.addEventListener('input', calculateProfitPercent);
+        if (sellPriceInput) sellPriceInput.addEventListener('input', calculateProfitPercent);
+
+        // Image preview on change
+        const imageInput = document.getElementById('product_image');
+        if (imageInput) {
+            imageInput.addEventListener('change', function () {
+                handleImagePreview(this);
+            });
+        }
+    });
 </script>
 
 <?php require_once 'includes/footer.php'; ?>
