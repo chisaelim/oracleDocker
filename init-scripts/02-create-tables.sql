@@ -1,12 +1,3 @@
--- Oracle Database Table Creation Script (Corrected)
--- This script creates a complete business database schema with clients, products, employees, and invoices
-
--- Connect to the pluggable database
-ALTER SESSION SET CONTAINER = XEPDB1;
-
--- Enable DBMS_OUTPUT for better feedback
-SET SERVEROUTPUT ON;
-
 -- a. Table: Client_Type
 CREATE TABLE Client_Type (
     CLIENT_TYPE NUMBER(3,0) GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -45,7 +36,7 @@ CREATE TABLE Products (
     SELL_PRICE NUMBER(12,2) CHECK (SELL_PRICE >= 0) NOT NULL,
     COST_PRICE NUMBER(12,2) CHECK (COST_PRICE >= 0) NOT NULL,
     QTY_ON_HAND NUMBER(6,0),
-    PHOTO BLOB,
+    PHOTO VARCHAR2(255),
     FOREIGN KEY (PRODUCTTYPE) REFERENCES Product_Type(PRODUCTTYPE_ID)
 );
 

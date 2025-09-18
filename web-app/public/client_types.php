@@ -34,14 +34,20 @@ $clientTypes = getAllClientTypes();
                         <i class="fas fa-tags me-2"></i>Client Types Management
                     </h4>
                     <button type="button" class="btn btn-light" data-bs-toggle="modal" data-bs-target="#clientTypeModal" onclick="resetForm()">
-                        <i class="fas fa-plus me-1"></i>Add New Client Type
+                        <i class="fas fa-plus me-1"></i>Add Client Type
                     </button>
                 </div>
                 <div class="card-body">
                     
                     <?php if (empty($clientTypes)): ?>
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle me-2"></i>No client types found. Start by adding your first client type!
+                        <div class="text-center py-5">
+                            <i class="fas fa-layer-group fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No Client Types Found</h5>
+                            <p class="text-muted">Start by adding your first client type.</p>
+                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#clientTypeModal" onclick="resetForm()">
+                                <i class="fas fa-plus me-1"></i>
+                                Add Client Type
+                            </button>
                         </div>
                     <?php else: ?>
                     <div class="table-responsive">
