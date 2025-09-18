@@ -709,7 +709,7 @@ function getProductPhotoPath($productNo)
                         <div id="imagePreview" class="mt-2"
                             style="<?= ($editProduct && $editProduct['PHOTO']) ? 'display: block;' : 'display: none;' ?>">
                             <img id="previewImg"
-                                src="<?= ($editProduct && $editProduct['PHOTO']) ? 'products.php?action=image&product_no=' . urlencode($editProduct['PRODUCT_NO']) : '' ?>"
+                                src="<?= ($editProduct && $editProduct['PHOTO']) ? 'uploads/products/' . htmlspecialchars($editProduct['PHOTO']) : '' ?>"
                                 alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 4px;">
                         </div>
                     </div>
