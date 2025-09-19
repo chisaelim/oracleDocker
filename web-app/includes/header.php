@@ -94,6 +94,12 @@
                             <i class="fas fa-file-invoice-dollar me-1"></i>Invoices
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?= basename($_SERVER['PHP_SELF']) == 'reports.php' ? 'active' : '' ?>"
+                            href="reports.php">
+                            <i class="fas fa-chart-line me-1"></i> Reports
+                        </a>
+                    </li>
                 </ul>
 
                 <ul class="navbar-nav">
