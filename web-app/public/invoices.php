@@ -2,24 +2,406 @@
 // invoices.php - Invoice Management with CRUD Operations
 require_once 'config/config.php';
 require_once 'config/database.php';
-require_once 'includes/header.php';
 require_once 'includes/utils.php';
 
-// Handle form submissions
+// AJAX function definitions (must be before any HTML output)
+function getInvoiceAjax($id) {
+    try {
+        $db = Database::getInstance();
+        
+        // Get invoice
+        $sql = "SELECT * FROM INVOICES WHERE INVOICENO = :id";
+        $params = [':id' => $id];
+        $stmt = $db->query($sql, $params);
+        $invoice = $db->fetchOne($stmt);
+        
+        // Get details
+        $sql = "SELECT * FROM INVOICE_DETAILS WHERE INVOICENO = :id";
+        $params = [':id' => $id];
+        $stmt = $db->query($sql, $params);
+        $details = $db->fetchAll($stmt);
+        
+        header('Content-Type: application/json');
+        echo json_encode(['success' => true, 'invoice' => $invoice, 'details' => $details]);
+        exit;
+        
+    } catch (Exception $e) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        exit;
+    }
+}
+
+function getInvoiceDetailsAjax($id) {
+    try {
+        $db = Database::getInstance();
+        
+        // Get invoice with client and employee info
+        $sql = "SELECT i.*, c.CLIENTNAME, e.EMPLOYEENAME 
+                FROM INVOICES i
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
+                LEFT JOIN Employees e ON i.EMPLOYEEID = e.EMPLOYEEID
+                WHERE i.INVOICENO = :id";
+        $params = [':id' => $id];
+        $stmt = $db->query($sql, $params);
+        $invoice = $db->fetchOne($stmt);
+        
+        // Get details with product info
+        $sql = "SELECT id.*, p.PRODUCTNAME 
+                FROM INVOICE_DETAILS id
+                LEFT JOIN Products p ON id.PRODUCT_NO = p.PRODUCT_NO
+                WHERE id.INVOICENO = :id";
+        $params = [':id' => $id];
+        $stmt = $db->query($sql, $params);
+        $details = $db->fetchAll($stmt);
+        
+        $total = 0;
+        foreach ($details as $row) {
+            $total += $row['QTY'] * $row['PRICE'];
+        }
+        
+        // Generate clean HTML without navbar for viewing
+        ?>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Invoice #<?php echo $invoice['INVOICENO']; ?></title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+            <style>
+                body { padding: 20px; }
+                .invoice-header { border-bottom: 2px solid #dee2e6; padding-bottom: 20px; margin-bottom: 30px; }
+                .company-header { text-align: center; margin-bottom: 30px; }
+                @media print {
+                    .no-print { display: none !important; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="company-header">
+                    <h2 class="text-primary"><i class="fas fa-building me-2"></i>Oracle Project Company</h2>
+                    <p class="text-muted">Invoice Management System</p>
+                </div>
+                
+                <div class="invoice-header">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h4><strong>Invoice #<?php echo $invoice['INVOICENO']; ?></strong></h4>
+                            <p><strong>Date:</strong> <?php echo date('M d, Y', strtotime($invoice['INVOICE_DATE'])); ?></p>
+                            <p><strong>Status:</strong> 
+                                <span class="badge <?php echo getStatusBadgeClass($invoice['INVOICE_STATUS']); ?>">
+                                    <?php echo $invoice['INVOICE_STATUS']; ?>
+                                </span>
+                            </p>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <p><strong>Client:</strong> <?php echo htmlspecialchars($invoice['CLIENTNAME']); ?></p>
+                            <p><strong>Employee:</strong> <?php echo htmlspecialchars($invoice['EMPLOYEENAME']); ?></p>
+                            <?php if ($invoice['INVOICEMEMO']): ?>
+                                <p><strong>Memo:</strong> <?php echo htmlspecialchars($invoice['INVOICEMEMO']); ?></p>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-bordered">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>Product</th>
+                                <th width="15%">Quantity</th>
+                                <th width="15%">Unit Price</th>
+                                <th width="15%">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($details as $detail): ?>
+                                <tr>
+                                    <td><?php echo htmlspecialchars($detail['PRODUCTNAME']); ?></td>
+                                    <td class="text-center"><?php echo $detail['QTY']; ?></td>
+                                    <td class="text-end">$<?php echo number_format($detail['PRICE'], 2); ?></td>
+                                    <td class="text-end"><strong>$<?php echo number_format($detail['QTY'] * $detail['PRICE'], 2); ?></strong></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                        <tfoot class="table-secondary">
+                            <tr>
+                                <th colspan="3" class="text-end">Grand Total:</th>
+                                <th class="text-end">$<?php echo number_format($total, 2); ?></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                
+                <div class="mt-4 no-print">
+                    <button class="btn btn-primary" onclick="window.print()">
+                        <i class="fas fa-print me-1"></i>Print Invoice
+                    </button>
+                    <button class="btn btn-secondary ms-2" onclick="window.close()">
+                        <i class="fas fa-times me-1"></i>Close
+                    </button>
+                </div>
+            </div>
+        </body>
+        </html>
+        <?php
+        exit;
+        
+    } catch (Exception $e) {
+        echo '<div class="alert alert-danger">Error loading invoice details: ' . $e->getMessage() . '</div>';
+        exit;
+    }
+}
+
+// Handle AJAX requests first (before any HTML output)
+if (isset($_GET['action'])) {
+    switch ($_GET['action']) {
+        case 'get_invoice':
+            if (isset($_GET['id'])) {
+                getInvoiceAjax($_GET['id']);
+            }
+            break;
+        case 'get_invoice_details':
+            if (isset($_GET['id'])) {
+                getInvoiceDetailsAjax($_GET['id']);
+            }
+            break;
+        case 'delete':
+            if (isset($_GET['id'])) {
+                handleDelete($_GET['id']);
+            }
+            break;
+    }
+}
+
+// Form processing functions (defined before use)
+function processAddInvoice($data) {
+    try {
+        $db = Database::getInstance();
+        
+        // Validate required fields
+        if (empty($data['client_no']) || empty($data['employee_id'])) {
+            setFlashMessage('Please fill in all required fields.', 'danger');
+            header('Location: invoices.php');
+            exit;
+        }
+        
+        // Validate invoice details - must have at least one valid item
+        $validItems = 0;
+        if (!empty($data['products']) && is_array($data['products'])) {
+            for ($i = 0; $i < count($data['products']); $i++) {
+                if (!empty($data['products'][$i]) && 
+                    !empty($data['quantities'][$i]) && 
+                    !empty($data['prices'][$i]) &&
+                    $data['quantities'][$i] > 0 &&
+                    $data['prices'][$i] >= 0) {
+                    $validItems++;
+                }
+            }
+        }
+        
+        if ($validItems === 0) {
+            setFlashMessage('An invoice must have at least one valid product item with quantity and price.', 'danger');
+            header('Location: invoices.php');
+            exit;
+        }
+        
+        // Insert invoice first to get the invoice number
+        $sql = "INSERT INTO INVOICES (INVOICE_DATE, CLIENT_NO, EMPLOYEEID, INVOICE_STATUS, INVOICEMEMO) 
+                VALUES (TO_DATE(:invoice_date, 'YYYY-MM-DD'), :client_no, :employee_id, :invoice_status, :invoice_memo)";
+        
+        $params = [
+            ':invoice_date' => $data['invoice_date'],
+            ':client_no' => $data['client_no'],
+            ':employee_id' => $data['employee_id'],
+            ':invoice_status' => $data['invoice_status'] ?? 'Pending',
+            ':invoice_memo' => $data['invoice_memo'] ?? null
+        ];
+        
+        $stmt = $db->query($sql, $params);
+        
+        // Get the last inserted invoice number
+        $sql = "SELECT MAX(INVOICENO) AS LAST_INVOICE FROM INVOICES WHERE CLIENT_NO = :client_no AND EMPLOYEEID = :employee_id";
+        $params = [
+            ':client_no' => $data['client_no'],
+            ':employee_id' => $data['employee_id']
+        ];
+        $stmt = $db->query($sql, $params);
+        $result = $db->fetchOne($stmt);
+        $invoice_no = $result['LAST_INVOICE'];
+        
+        if (!$invoice_no) {
+            throw new Exception("Failed to get invoice number");
+        }
+        
+        // Insert invoice details - only insert valid items
+        $products = $data['products'];
+        $quantities = $data['quantities'];
+        $prices = $data['prices'];
+        $insertedItems = 0;
+        
+        for ($i = 0; $i < count($products); $i++) {
+            if (!empty($products[$i]) && 
+                !empty($quantities[$i]) && 
+                !empty($prices[$i]) &&
+                $quantities[$i] > 0 &&
+                $prices[$i] >= 0) {
+                
+                $sql = "INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) 
+                        VALUES (:invoice_no, :product_no, :qty, :price)";
+                
+                $params = [
+                    ':invoice_no' => $invoice_no,
+                    ':product_no' => $products[$i],
+                    ':qty' => $quantities[$i],
+                    ':price' => $prices[$i]
+                ];
+                
+                $stmt = $db->query($sql, $params);
+                $insertedItems++;
+            }
+        }
+        
+        // Final check to ensure we actually inserted items
+        if ($insertedItems === 0) {
+            throw new Exception("No valid invoice items were inserted. Invoice cannot be created without items.");
+        }
+        
+        $db->commit();
+        setFlashMessage('Invoice created successfully!', 'success');
+        
+    } catch (Exception $e) {
+        $db = Database::getInstance();
+        $db->rollback();
+        setFlashMessage('Error creating invoice: ' . $e->getMessage(), 'danger');
+    }
+    
+    header('Location: invoices.php');
+    exit;
+}
+
+function processUpdateInvoice($data) {
+    try {
+        $db = Database::getInstance();
+        
+        // Validate required fields
+        if (empty($data['invoice_id']) || empty($data['client_no']) || empty($data['employee_id'])) {
+            setFlashMessage('Please fill in all required fields.', 'danger');
+            header('Location: invoices.php');
+            exit;
+        }
+        
+        // Validate invoice details - must have at least one valid item
+        $validItems = 0;
+        if (!empty($data['products']) && is_array($data['products'])) {
+            for ($i = 0; $i < count($data['products']); $i++) {
+                if (!empty($data['products'][$i]) && 
+                    !empty($data['quantities'][$i]) && 
+                    !empty($data['prices'][$i]) &&
+                    $data['quantities'][$i] > 0 &&
+                    $data['prices'][$i] >= 0) {
+                    $validItems++;
+                }
+            }
+        }
+        
+        if ($validItems === 0) {
+            setFlashMessage('An invoice must have at least one valid product item with quantity and price.', 'danger');
+            header('Location: invoices.php');
+            exit;
+        }
+        
+        $invoice_id = $data['invoice_id'];
+        
+        // Update invoice
+        $sql = "UPDATE INVOICES SET INVOICE_DATE = TO_DATE(:invoice_date, 'YYYY-MM-DD'), 
+                CLIENT_NO = :client_no, EMPLOYEEID = :employee_id, 
+                INVOICE_STATUS = :invoice_status, INVOICEMEMO = :invoice_memo 
+                WHERE INVOICENO = :invoice_id";
+        
+        $params = [
+            ':invoice_date' => $data['invoice_date'],
+            ':client_no' => $data['client_no'],
+            ':employee_id' => $data['employee_id'],
+            ':invoice_status' => $data['invoice_status'] ?? 'Pending',
+            ':invoice_memo' => $data['invoice_memo'] ?? null,
+            ':invoice_id' => $invoice_id
+        ];
+        
+        $stmt = $db->query($sql, $params);
+        
+        // Delete existing details
+        $sql = "DELETE FROM INVOICE_DETAILS WHERE INVOICENO = :invoice_id";
+        $params = [':invoice_id' => $invoice_id];
+        $stmt = $db->query($sql, $params);
+        
+        // Insert new details - only insert valid items
+        $products = $data['products'];
+        $quantities = $data['quantities'];
+        $prices = $data['prices'];
+        $insertedItems = 0;
+        
+        for ($i = 0; $i < count($products); $i++) {
+            if (!empty($products[$i]) && 
+                !empty($quantities[$i]) && 
+                !empty($prices[$i]) &&
+                $quantities[$i] > 0 &&
+                $prices[$i] >= 0) {
+                
+                $sql = "INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) 
+                        VALUES (:invoice_id, :product_no, :qty, :price)";
+                
+                $params = [
+                    ':invoice_id' => $invoice_id,
+                    ':product_no' => $products[$i],
+                    ':qty' => $quantities[$i],
+                    ':price' => $prices[$i]
+                ];
+                
+                $stmt = $db->query($sql, $params);
+                $insertedItems++;
+            }
+        }
+        
+        // Final check to ensure we actually inserted items
+        if ($insertedItems === 0) {
+            throw new Exception("No valid invoice items were inserted. Invoice cannot exist without items.");
+        }
+        
+        $db->commit();
+        setFlashMessage('Invoice updated successfully!', 'success');
+        
+    } catch (Exception $e) {
+        $db = Database::getInstance();
+        $db->rollback();
+        setFlashMessage('Error updating invoice: ' . $e->getMessage(), 'danger');
+    }
+    
+    header('Location: invoices.php');
+    exit;
+}
+
+// Handle form submissions BEFORE including header (to allow redirects)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    handleFormSubmission();
+    // We need to handle form submissions before any output
+    // Process the form and redirect
+    $action = $_POST['action'] ?? '';
+    
+    switch ($action) {
+        case 'add':
+            processAddInvoice($_POST);
+            break;
+        case 'edit':
+            processUpdateInvoice($_POST);
+            break;
+    }
 }
 
-// Handle delete requests
-if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) {
-    handleDelete($_GET['id']);
-}
-
-// Handle edit requests
-$editInvoice = null;
-if (isset($_GET['action']) && $_GET['action'] === 'edit' && isset($_GET['id'])) {
-    // Invoice editing is handled via AJAX in the JavaScript section
-}
+// Now include header after AJAX and form handling
+require_once 'includes/header.php';
 
 // Get all invoices for display
 $invoices = getAllInvoices();
@@ -89,8 +471,7 @@ $products = getAllProducts();
                                             </td>
                                             <td>
                                                 <button type="button" class="btn btn-sm btn-outline-info me-1" 
-                                                        onclick="viewInvoiceDetails(<?php echo $invoice['INVOICENO']; ?>)"
-                                                        data-bs-toggle="modal" data-bs-target="#viewInvoiceModal">
+                                                        onclick="viewInvoiceDetails(<?php echo $invoice['INVOICENO']; ?>)">
                                                     <i class="fas fa-eye"></i>
                                                 </button>
                                                 <button type="button" class="btn btn-sm btn-outline-primary me-1" 
@@ -254,20 +635,7 @@ $products = getAllProducts();
     </div>
 </div>
 
-<!-- View Invoice Modal -->
-<div class="modal fade" id="viewInvoiceModal" tabindex="-1" aria-labelledby="viewInvoiceModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="viewInvoiceModalLabel">Invoice Details</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body" id="invoice-details-content">
-                <!-- Invoice details will be loaded here -->
-            </div>
-        </div>
-    </div>
-</div>
+<!-- View Invoice Modal removed - now opens in new window -->
 
 <script>
 // Store products data for JavaScript use
@@ -366,6 +734,8 @@ function removeInvoiceItem(button) {
     if (itemsContainer.children.length > 1) {
         button.closest('.invoice-item').remove();
         calculateInvoiceTotal();
+    } else {
+        alert('An invoice must have at least one item. Cannot remove the last item.');
     }
 }
 
@@ -407,8 +777,19 @@ function editInvoice(invoiceId) {
             if (data.success) {
                 populateInvoiceForm(data.invoice, data.details);
             } else {
-                alert('Error loading invoice data');
+                Swal.fire({
+                    title: 'Error',
+                    text: 'Error loading invoice data',
+                    icon: 'error'
+                });
             }
+        })
+        .catch(error => {
+            Swal.fire({
+                title: 'Error',
+                text: 'Failed to load invoice data',
+                icon: 'error'
+            });
         });
 }
 
@@ -424,69 +805,147 @@ function createProductOptionsWithSelected(selectedProductNo) {
 }
 
 function populateInvoiceForm(invoice, details) {
+    // Set modal title and form action
     document.querySelector('#invoiceModal .modal-title').textContent = 'Edit Invoice';
     document.querySelector('input[name="action"]').value = 'edit';
     document.getElementById('invoice_id').value = invoice.INVOICENO;
+    
+    // Populate basic invoice fields
     document.getElementById('client_no').value = invoice.CLIENT_NO;
     document.getElementById('employee_id').value = invoice.EMPLOYEEID;
-    document.getElementById('invoice_date').value = invoice.INVOICE_DATE.split(' ')[0];
     document.getElementById('invoice_status').value = invoice.INVOICE_STATUS;
     document.getElementById('invoice_memo').value = invoice.INVOICEMEMO || '';
     
-    // Clear and populate items
+    // Handle Oracle date format (DD-MON-YY or DD-MON-YYYY)
+    let invoiceDate = invoice.INVOICE_DATE;
+    if (invoiceDate && invoiceDate.includes('-')) {
+        // Convert Oracle date format to YYYY-MM-DD
+        let dateParts = invoiceDate.split('-');
+        if (dateParts.length === 3) {
+            let day = dateParts[0].padStart(2, '0');
+            let month = dateParts[1];
+            let year = dateParts[2];
+            
+            // Convert month name to number
+            const months = {
+                'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04',
+                'MAY': '05', 'JUN': '06', 'JUL': '07', 'AUG': '08',
+                'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
+            };
+            
+            if (months[month.toUpperCase()]) {
+                if (year.length === 2) {
+                    year = '20' + year;
+                }
+                invoiceDate = year + '-' + months[month.toUpperCase()] + '-' + day;
+            }
+        }
+    }
+    document.getElementById('invoice_date').value = invoiceDate;
+    
+    // Clear existing items container
     const itemsContainer = document.getElementById('invoice-items');
     itemsContainer.innerHTML = '';
     
-    details.forEach(detail => {
-        const newItem = document.createElement('div');
-        newItem.className = 'invoice-item mb-3';
-        newItem.innerHTML = `
-            <div class="row">
-                <div class="col-md-4">
-                    <label class="form-label">Product *</label>
-                    <select class="form-select product-select" name="products[]" required onchange="updatePrice(this)">
-                        ${createProductOptionsWithSelected(detail.PRODUCT_NO)}
-                    </select>
+    // Add each detail as an invoice item
+    if (details && details.length > 0) {
+        details.forEach((detail, index) => {
+            const newItem = document.createElement('div');
+            newItem.className = 'invoice-item mb-3';
+            newItem.innerHTML = `
+                <div class="row">
+                    <div class="col-md-4">
+                        <label class="form-label">Product *</label>
+                        <select class="form-select product-select" name="products[]" required onchange="updatePrice(this)">
+                            ${createProductOptionsWithSelected(detail.PRODUCT_NO)}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Quantity *</label>
+                        <input type="number" class="form-control quantity-input" name="quantities[]" 
+                               min="1" value="${detail.QTY}" required onchange="calculateLineTotal(this)">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Price *</label>
+                        <input type="number" class="form-control price-input" name="prices[]" 
+                               step="0.01" min="0" value="${parseFloat(detail.PRICE).toFixed(2)}" required onchange="calculateLineTotal(this)">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Total</label>
+                        <input type="text" class="form-control line-total" readonly value="$${(parseFloat(detail.QTY) * parseFloat(detail.PRICE)).toFixed(2)}">
+                        <button type="button" class="btn btn-sm btn-outline-danger mt-1" 
+                                onclick="removeInvoiceItem(this)" ${details.length === 1 ? 'title="Cannot remove the last item"' : ''}>
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label">Quantity *</label>
-                    <input type="number" class="form-control quantity-input" name="quantities[]" 
-                           min="1" value="${detail.QTY}" required onchange="calculateLineTotal(this)">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Price *</label>
-                    <input type="number" class="form-control price-input" name="prices[]" 
-                           step="0.01" min="0" value="${detail.PRICE}" required onchange="calculateLineTotal(this)">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Total</label>
-                    <input type="text" class="form-control line-total" readonly value="$${(detail.QTY * detail.PRICE).toFixed(2)}">
-                    <button type="button" class="btn btn-sm btn-outline-danger mt-1" 
-                            onclick="removeInvoiceItem(this)">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-            </div>
-        `;
-        itemsContainer.appendChild(newItem);
-    });
+            `;
+            itemsContainer.appendChild(newItem);
+        });
+    } else {
+        // If no details, add one empty item
+        addInvoiceItem();
+    }
     
+    // Calculate the total
     calculateInvoiceTotal();
+    
+    // Scroll to top of modal content to show loaded items
+    const modalBody = document.querySelector('#invoiceModal .modal-body');
+    if (modalBody) {
+        modalBody.scrollTop = 0;
+    }
 }
 
 function viewInvoiceDetails(invoiceId) {
-    fetch(`invoices.php?action=get_invoice_details&id=${invoiceId}`)
-        .then(response => response.text())
-        .then(html => {
-            document.getElementById('invoice-details-content').innerHTML = html;
-        });
+    // Open invoice details in a new window without navbar
+    const url = `invoices.php?action=get_invoice_details&id=${invoiceId}`;
+    window.open(url, 'invoiceDetails', 'width=800,height=600,scrollbars=yes,resizable=yes');
 }
 
 function confirmDelete(id, name) {
-    if (confirm(`Are you sure you want to delete ${name}? This will also delete all associated invoice details.`)) {
-        window.location.href = `invoices.php?action=delete&id=${id}`;
-    }
+    Swal.fire({
+        title: 'Confirm Deletion',
+        text: `Are you sure you want to delete ${name}? This will also delete all associated invoice details.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!',
+        cancelButtonText: 'Cancel'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            window.location.href = `invoices.php?action=delete&id=${encodeURIComponent(id)}`;
+        }
+    });
 }
+
+// Form validation
+document.getElementById('invoiceForm').addEventListener('submit', function(e) {
+    // Check if there's at least one valid item
+    let hasValidItem = false;
+    const items = document.querySelectorAll('.invoice-item');
+    
+    items.forEach(item => {
+        const productSelect = item.querySelector('.product-select');
+        const quantityInput = item.querySelector('.quantity-input');
+        const priceInput = item.querySelector('.price-input');
+        
+        if (productSelect.value && 
+            quantityInput.value && 
+            priceInput.value &&
+            parseFloat(quantityInput.value) > 0 &&
+            parseFloat(priceInput.value) >= 0) {
+            hasValidItem = true;
+        }
+    });
+    
+    if (!hasValidItem) {
+        e.preventDefault();
+        alert('An invoice must have at least one valid product item with quantity and price.');
+        return false;
+    }
+});
 
 </script>
 
@@ -496,14 +955,15 @@ function confirmDelete(id, name) {
 function getAllInvoices() {
     try {
         $db = Database::getInstance();
+        // Only show invoices that have invoice details (business rule: no invoice without items)
         $sql = "SELECT i.INVOICENO, i.INVOICE_DATE, i.CLIENT_NO, i.EMPLOYEEID, i.INVOICE_STATUS, i.INVOICEMEMO,
                        c.CLIENTNAME as CLIENT_NAME, e.EMPLOYEENAME as EMPLOYEE_NAME,
-                       NVL(totals.TOTAL_AMOUNT, 0) as TOTAL_AMOUNT,
-                       NVL(totals.ITEM_COUNT, 0) as ITEM_COUNT
+                       totals.TOTAL_AMOUNT,
+                       totals.ITEM_COUNT
                 FROM INVOICES i
                 LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 LEFT JOIN Employees e ON i.EMPLOYEEID = e.EMPLOYEEID
-                LEFT JOIN (
+                INNER JOIN (
                     SELECT INVOICENO, 
                            SUM(QTY * PRICE) as TOTAL_AMOUNT,
                            COUNT(*) as ITEM_COUNT
@@ -564,381 +1024,31 @@ function getStatusBadgeClass($status) {
     }
 }
 
-function handleFormSubmission() {
-    $action = $_POST['action'] ?? '';
-    
-    switch ($action) {
-        case 'add':
-            addInvoice($_POST);
-            break;
-        case 'edit':
-            updateInvoice($_POST);
-            break;
-    }
-}
-
-function addInvoice($data) {
-    try {
-        $db = Database::getInstance();
-        
-        // Validate required fields
-        if (empty($data['client_no']) || empty($data['employee_id']) || empty($data['products'][0])) {
-            setFlashMessage('Please fill in all required fields and add at least one product.', 'danger');
-            return;
-        }
-        
-        // Start transaction
-        $db->getConnection();
-        
-        // Insert invoice
-        $sql = "INSERT INTO INVOICES (INVOICE_DATE, CLIENT_NO, EMPLOYEEID, INVOICE_STATUS, INVOICEMEMO) 
-                VALUES (TO_DATE(:invoice_date, 'YYYY-MM-DD'), :client_no, :employee_id, :invoice_status, :invoice_memo) 
-                RETURNING INVOICENO INTO :invoice_no";
-        
-        $stmt = oci_parse($db->getConnection(), $sql);
-        
-        $invoice_date = $data['invoice_date'];
-        $client_no = $data['client_no'];
-        $employee_id = $data['employee_id'];
-        $invoice_status = $data['invoice_status'] ?? 'Pending';
-        $invoice_memo = $data['invoice_memo'] ?? null;
-        $invoice_no = 0;
-        
-        oci_bind_by_name($stmt, ':invoice_date', $invoice_date);
-        oci_bind_by_name($stmt, ':client_no', $client_no);
-        oci_bind_by_name($stmt, ':employee_id', $employee_id);
-        oci_bind_by_name($stmt, ':invoice_status', $invoice_status);
-        oci_bind_by_name($stmt, ':invoice_memo', $invoice_memo);
-        oci_bind_by_name($stmt, ':invoice_no', $invoice_no, -1, SQLT_INT);
-        
-        $result = oci_execute($stmt, OCI_NO_AUTO_COMMIT);
-        if (!$result) {
-            $error = oci_error($stmt);
-            throw new Exception($error['message']);
-        }
-        
-        oci_free_statement($stmt);
-        
-        // Insert invoice details
-        $products = $data['products'];
-        $quantities = $data['quantities'];
-        $prices = $data['prices'];
-        
-        for ($i = 0; $i < count($products); $i++) {
-            if (!empty($products[$i]) && !empty($quantities[$i]) && !empty($prices[$i])) {
-                $sql = "INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) 
-                        VALUES (:invoice_no, :product_no, :qty, :price)";
-                
-                $stmt = oci_parse($db->getConnection(), $sql);
-                
-                $product_no = $products[$i];
-                $qty = $quantities[$i];
-                $price = $prices[$i];
-                
-                oci_bind_by_name($stmt, ':invoice_no', $invoice_no);
-                oci_bind_by_name($stmt, ':product_no', $product_no);
-                oci_bind_by_name($stmt, ':qty', $qty);
-                oci_bind_by_name($stmt, ':price', $price);
-                
-                $result = oci_execute($stmt, OCI_NO_AUTO_COMMIT);
-                if (!$result) {
-                    $error = oci_error($stmt);
-                    throw new Exception($error['message']);
-                }
-                
-                oci_free_statement($stmt);
-            }
-        }
-        
-        oci_commit($db->getConnection());
-        setFlashMessage('Invoice created successfully!', 'success');
-        header('Location: invoices.php');
-        exit;
-        
-    } catch (Exception $e) {
-        $db = Database::getInstance();
-        oci_rollback($db->getConnection());
-        setFlashMessage('Error creating invoice: ' . $e->getMessage(), 'danger');
-    }
-}
-
-function updateInvoice($data) {
-    try {
-        $db = Database::getInstance();
-        
-        // Validate required fields
-        if (empty($data['invoice_id']) || empty($data['client_no']) || empty($data['employee_id']) || empty($data['products'][0])) {
-            setFlashMessage('Please fill in all required fields and add at least one product.', 'danger');
-            return;
-        }
-        
-        $invoice_id = $data['invoice_id'];
-        
-        // Update invoice
-        $sql = "UPDATE INVOICES SET INVOICE_DATE = TO_DATE(:invoice_date, 'YYYY-MM-DD'), 
-                CLIENT_NO = :client_no, EMPLOYEEID = :employee_id, 
-                INVOICE_STATUS = :invoice_status, INVOICEMEMO = :invoice_memo 
-                WHERE INVOICENO = :invoice_id";
-        
-        $stmt = oci_parse($db->getConnection(), $sql);
-        
-        $invoice_date = $data['invoice_date'];
-        $client_no = $data['client_no'];
-        $employee_id = $data['employee_id'];
-        $invoice_status = $data['invoice_status'] ?? 'Pending';
-        $invoice_memo = $data['invoice_memo'] ?? null;
-        
-        oci_bind_by_name($stmt, ':invoice_date', $invoice_date);
-        oci_bind_by_name($stmt, ':client_no', $client_no);
-        oci_bind_by_name($stmt, ':employee_id', $employee_id);
-        oci_bind_by_name($stmt, ':invoice_status', $invoice_status);
-        oci_bind_by_name($stmt, ':invoice_memo', $invoice_memo);
-        oci_bind_by_name($stmt, ':invoice_id', $invoice_id);
-        
-        $result = oci_execute($stmt, OCI_NO_AUTO_COMMIT);
-        if (!$result) {
-            $error = oci_error($stmt);
-            throw new Exception($error['message']);
-        }
-        
-        oci_free_statement($stmt);
-        
-        // Delete existing details
-        $sql = "DELETE FROM INVOICE_DETAILS WHERE INVOICENO = :invoice_id";
-        $stmt = oci_parse($db->getConnection(), $sql);
-        oci_bind_by_name($stmt, ':invoice_id', $invoice_id);
-        $result = oci_execute($stmt, OCI_NO_AUTO_COMMIT);
-        if (!$result) {
-            $error = oci_error($stmt);
-            throw new Exception($error['message']);
-        }
-        oci_free_statement($stmt);
-        
-        // Insert new details
-        $products = $data['products'];
-        $quantities = $data['quantities'];
-        $prices = $data['prices'];
-        
-        for ($i = 0; $i < count($products); $i++) {
-            if (!empty($products[$i]) && !empty($quantities[$i]) && !empty($prices[$i])) {
-                $sql = "INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) 
-                        VALUES (:invoice_id, :product_no, :qty, :price)";
-                
-                $stmt = oci_parse($db->getConnection(), $sql);
-                
-                $product_no = $products[$i];
-                $qty = $quantities[$i];
-                $price = $prices[$i];
-                
-                oci_bind_by_name($stmt, ':invoice_id', $invoice_id);
-                oci_bind_by_name($stmt, ':product_no', $product_no);
-                oci_bind_by_name($stmt, ':qty', $qty);
-                oci_bind_by_name($stmt, ':price', $price);
-                
-                $result = oci_execute($stmt, OCI_NO_AUTO_COMMIT);
-                if (!$result) {
-                    $error = oci_error($stmt);
-                    throw new Exception($error['message']);
-                }
-                
-                oci_free_statement($stmt);
-            }
-        }
-        
-        oci_commit($db->getConnection());
-        setFlashMessage('Invoice updated successfully!', 'success');
-        header('Location: invoices.php');
-        exit;
-        
-    } catch (Exception $e) {
-        $db = Database::getInstance();
-        oci_rollback($db->getConnection());
-        setFlashMessage('Error updating invoice: ' . $e->getMessage(), 'danger');
-    }
-}
-
 function handleDelete($id) {
     try {
         $db = Database::getInstance();
         
         // Delete invoice details first (foreign key constraint)
         $sql = "DELETE FROM INVOICE_DETAILS WHERE INVOICENO = :id";
-        $stmt = oci_parse($db->getConnection(), $sql);
-        oci_bind_by_name($stmt, ':id', $id);
-        $result = oci_execute($stmt, OCI_NO_AUTO_COMMIT);
-        
-        if (!$result) {
-            $error = oci_error($stmt);
-            throw new Exception($error['message']);
-        }
-        oci_free_statement($stmt);
+        $params = [':id' => $id];
+        $stmt = $db->query($sql, $params);
         
         // Delete invoice
         $sql = "DELETE FROM INVOICES WHERE INVOICENO = :id";
-        $stmt = oci_parse($db->getConnection(), $sql);
-        oci_bind_by_name($stmt, ':id', $id);
-        $result = oci_execute($stmt, OCI_NO_AUTO_COMMIT);
+        $params = [':id' => $id];
+        $stmt = $db->query($sql, $params);
         
-        if (!$result) {
-            $error = oci_error($stmt);
-            throw new Exception($error['message']);
-        }
-        
-        oci_commit($db->getConnection());
-        oci_free_statement($stmt);
-        
+        $db->commit();
         setFlashMessage('Invoice deleted successfully!', 'success');
         
     } catch (Exception $e) {
         $db = Database::getInstance();
-        oci_rollback($db->getConnection());
+        $db->rollback();
         setFlashMessage('Error deleting invoice: ' . $e->getMessage(), 'danger');
     }
     
     header('Location: invoices.php');
     exit;
-}
-
-// Handle AJAX requests
-if (isset($_GET['action'])) {
-    switch ($_GET['action']) {
-        case 'get_invoice':
-            getInvoiceAjax($_GET['id']);
-            break;
-        case 'get_invoice_details':
-            getInvoiceDetailsAjax($_GET['id']);
-            break;
-    }
-}
-
-function getInvoiceAjax($id) {
-    try {
-        $db = Database::getInstance();
-        
-        // Get invoice
-        $sql = "SELECT * FROM INVOICES WHERE INVOICENO = :id";
-        $stmt = oci_parse($db->getConnection(), $sql);
-        oci_bind_by_name($stmt, ':id', $id);
-        oci_execute($stmt);
-        $invoice = oci_fetch_assoc($stmt);
-        oci_free_statement($stmt);
-        
-        // Get details
-        $sql = "SELECT * FROM INVOICE_DETAILS WHERE INVOICENO = :id";
-        $stmt = oci_parse($db->getConnection(), $sql);
-        oci_bind_by_name($stmt, ':id', $id);
-        oci_execute($stmt);
-        
-        $details = [];
-        while (($row = oci_fetch_assoc($stmt)) !== false) {
-            $details[] = $row;
-        }
-        oci_free_statement($stmt);
-        
-        header('Content-Type: application/json');
-        echo json_encode(['success' => true, 'invoice' => $invoice, 'details' => $details]);
-        exit;
-        
-    } catch (Exception $e) {
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
-        exit;
-    }
-}
-
-function getInvoiceDetailsAjax($id) {
-    try {
-        $db = Database::getInstance();
-        
-        // Get invoice with client and employee info
-        $sql = "SELECT i.*, c.CLIENTNAME, e.EMPLOYEENAME 
-                FROM INVOICES i
-                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
-                LEFT JOIN Employees e ON i.EMPLOYEEID = e.EMPLOYEEID
-                WHERE i.INVOICENO = :id";
-        $stmt = oci_parse($db->getConnection(), $sql);
-        oci_bind_by_name($stmt, ':id', $id);
-        oci_execute($stmt);
-        $invoice = oci_fetch_assoc($stmt);
-        oci_free_statement($stmt);
-        
-        // Get details with product info
-        $sql = "SELECT id.*, p.PRODUCTNAME 
-                FROM INVOICE_DETAILS id
-                LEFT JOIN Products p ON id.PRODUCT_NO = p.PRODUCT_NO
-                WHERE id.INVOICENO = :id";
-        $stmt = oci_parse($db->getConnection(), $sql);
-        oci_bind_by_name($stmt, ':id', $id);
-        oci_execute($stmt);
-        
-        $details = [];
-        $total = 0;
-        while (($row = oci_fetch_assoc($stmt)) !== false) {
-            $details[] = $row;
-            $total += $row['QTY'] * $row['PRICE'];
-        }
-        oci_free_statement($stmt);
-        
-        // Generate HTML
-        ob_start();
-        ?>
-        <div class="invoice-header mb-4">
-            <div class="row">
-                <div class="col-md-6">
-                    <h6><strong>Invoice #<?php echo $invoice['INVOICENO']; ?></strong></h6>
-                    <p><strong>Date:</strong> <?php echo date('M d, Y', strtotime($invoice['INVOICE_DATE'])); ?></p>
-                    <p><strong>Status:</strong> 
-                        <span class="badge <?php echo getStatusBadgeClass($invoice['INVOICE_STATUS']); ?>">
-                            <?php echo $invoice['INVOICE_STATUS']; ?>
-                        </span>
-                    </p>
-                </div>
-                <div class="col-md-6">
-                    <p><strong>Client:</strong> <?php echo htmlspecialchars($invoice['CLIENTNAME']); ?></p>
-                    <p><strong>Employee:</strong> <?php echo htmlspecialchars($invoice['EMPLOYEENAME']); ?></p>
-                    <?php if ($invoice['INVOICEMEMO']): ?>
-                        <p><strong>Memo:</strong> <?php echo htmlspecialchars($invoice['INVOICEMEMO']); ?></p>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
-        
-        <div class="table-responsive">
-            <table class="table table-bordered">
-                <thead>
-                    <tr>
-                        <th>Product</th>
-                        <th>Quantity</th>
-                        <th>Price</th>
-                        <th>Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($details as $detail): ?>
-                        <tr>
-                            <td><?php echo htmlspecialchars($detail['PRODUCTNAME']); ?></td>
-                            <td><?php echo $detail['QTY']; ?></td>
-                            <td>$<?php echo number_format($detail['PRICE'], 2); ?></td>
-                            <td>$<?php echo number_format($detail['QTY'] * $detail['PRICE'], 2); ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th colspan="3">Total</th>
-                        <th>$<?php echo number_format($total, 2); ?></th>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-        <?php
-        echo ob_get_clean();
-        exit;
-        
-    } catch (Exception $e) {
-        echo '<div class="alert alert-danger">Error loading invoice details: ' . $e->getMessage() . '</div>';
-        exit;
-    }
 }
 
 require_once 'includes/footer.php';
