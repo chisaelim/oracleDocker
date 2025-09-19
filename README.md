@@ -56,8 +56,7 @@ A complete containerized invoice management system built with **Oracle XE Databa
 oracleDocker/
 ├── init-scripts/              # Database initialization
 │   ├── 01-create-user.sql     # Oracle user creation
-│   ├── 02-create-tables.sql   # Database schema
-│   └── 03-insert-sample-data.sql # Sample data
+│   └── 02-create-tables.sql   # Database schema and sample data
 ├── web-app/                   # PHP web application
 │   ├── assets/                # CSS, JS, images
 │   ├── config/                # Database configuration
