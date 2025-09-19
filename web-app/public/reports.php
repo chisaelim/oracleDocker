@@ -1417,13 +1417,61 @@ let financialTrendChart, costBreakdownChart, categoryProfitChart, clientTypeROIC
 
 // Initialize reports when page loads
 document.addEventListener('DOMContentLoaded', function() {
+    // Restore active tab from localStorage or default to sales
+    const savedTab = localStorage.getItem('reports_active_tab') || '#sales';
+    const savedTabButton = document.querySelector(`[data-bs-target="${savedTab}"]`);
+    
+    if (savedTabButton) {
+        // Remove active class from all tabs and panes
+        document.querySelectorAll('#reportTabs .nav-link').forEach(tab => {
+            tab.classList.remove('active');
+            tab.setAttribute('aria-selected', 'false');
+        });
+        document.querySelectorAll('.tab-pane').forEach(pane => {
+            pane.classList.remove('active', 'show');
+        });
+        
+        // Activate the saved tab
+        savedTabButton.classList.add('active');
+        savedTabButton.setAttribute('aria-selected', 'true');
+        const targetPane = document.querySelector(savedTab);
+        if (targetPane) {
+            targetPane.classList.add('active', 'show');
+        }
+    }
+    
     loadSummaryData();
-    loadSalesReport();
+    
+    // Load data for the active tab
+    switch(savedTab) {
+        case '#sales':
+            loadSalesReport();
+            break;
+        case '#inventory':
+            loadInventoryReport();
+            break;
+        case '#clients':
+            loadClientReport();
+            break;
+        case '#employees':
+            loadEmployeeReport();
+            break;
+        case '#financial':
+            loadFinancialReport();
+            break;
+        default:
+            loadSalesReport();
+    }
     
     // Add event listeners for tab switches
     document.querySelectorAll('#reportTabs .nav-link').forEach(tab => {
         tab.addEventListener('shown.bs.tab', function(e) {
             const targetTab = e.target.getAttribute('data-bs-target');
+            
+            // Save active tab to localStorage
+            localStorage.setItem('reports_active_tab', targetTab);
+            
+            // Load data for the selected tab
             switch(targetTab) {
                 case '#sales':
                     loadSalesReport();
