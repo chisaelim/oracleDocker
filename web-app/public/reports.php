@@ -11,23 +11,26 @@ function getSalesReportData() {
         $start_date = $_GET['start_date'] ?? date('Y-m-d', strtotime('-30 days'));
         $end_date = $_GET['end_date'] ?? date('Y-m-d');
         
-        // Enhanced Summary data with profit analysis
+        // Enhanced Summary data with profit analysis including client discounts
         $sql = "SELECT 
-                    NVL(SUM(id.QTY * id.PRICE), 0) as total_revenue,
+                    NVL(SUM(id.QTY * id.PRICE), 0) as total_gross_revenue,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as total_revenue,
+                    NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as total_discount_given,
                     NVL(SUM(id.QTY * p.COST_PRICE), 0) as total_cost,
-                    NVL(SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE), 0) as total_profit,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as total_profit,
                     CASE 
-                        WHEN SUM(id.QTY * id.PRICE) > 0 
-                        THEN ROUND(((SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE)) / SUM(id.QTY * id.PRICE)) * 100, 2)
+                        WHEN SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) > 0 
+                        THEN ROUND(((SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE)) / SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100))) * 100, 2)
                         ELSE 0 
                     END as profit_margin_percent,
                     COUNT(DISTINCT i.INVOICENO) as total_invoices,
                     COUNT(DISTINCT i.CLIENT_NO) as active_clients,
-                    NVL(AVG(id.QTY * id.PRICE), 0) as avg_order_value,
+                    NVL(AVG((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as avg_order_value,
                     NVL(SUM(id.QTY), 0) as total_items_sold
                 FROM INVOICES i
                 LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
                 LEFT JOIN Products p ON id.PRODUCT_NO = p.PRODUCT_NO
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                       AND TO_DATE(:end_date, 'YYYY-MM-DD')";
         
@@ -35,16 +38,19 @@ function getSalesReportData() {
         $stmt = $db->query($sql, $params);
         $summary = $db->fetchOne($stmt);
         
-        // Enhanced chart data - daily sales with profit
+        // Enhanced chart data - daily sales with profit including discounts
         $sql = "SELECT 
                     TO_CHAR(i.INVOICE_DATE, 'YYYY-MM-DD') as sale_date,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as daily_revenue,
+                    NVL(SUM(id.QTY * id.PRICE), 0) as daily_gross_revenue,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as daily_revenue,
+                    NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as daily_discount,
                     NVL(SUM(id.QTY * p.COST_PRICE), 0) as daily_cost,
-                    NVL(SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE), 0) as daily_profit,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as daily_profit,
                     COUNT(DISTINCT i.INVOICENO) as daily_orders
                 FROM INVOICES i
                 LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
                 LEFT JOIN Products p ON id.PRODUCT_NO = p.PRODUCT_NO
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                       AND TO_DATE(:end_date, 'YYYY-MM-DD')
                 GROUP BY TO_CHAR(i.INVOICE_DATE, 'YYYY-MM-DD')
@@ -60,13 +66,14 @@ function getSalesReportData() {
             'orders' => array_map('intval', array_column($chart_raw, 'DAILY_ORDERS'))
         ];
         
-        // Enhanced status distribution with amounts
+        // Enhanced status distribution with amounts including discounts
         $sql = "SELECT 
                     NVL(i.INVOICE_STATUS, 'Unknown') as invoice_status,
                     COUNT(DISTINCT i.INVOICENO) as status_count,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as status_revenue
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as status_revenue
                 FROM INVOICES i
                 LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                       AND TO_DATE(:end_date, 'YYYY-MM-DD')
                 GROUP BY i.INVOICE_STATUS
@@ -81,18 +88,19 @@ function getSalesReportData() {
             'revenues' => array_map('floatval', array_column($status_raw, 'STATUS_REVENUE'))
         ];
         
-        // Top products by revenue
+        // Top products by revenue including client discounts
         $sql = "SELECT 
                     p.PRODUCTNAME as product_name,
                     pt.PRODUCTTYPE_NAME as category,
                     NVL(SUM(id.QTY), 0) as units_sold,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as revenue,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as revenue,
                     NVL(SUM(id.QTY * p.COST_PRICE), 0) as cost,
-                    NVL(SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE), 0) as profit
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as profit
                 FROM INVOICE_DETAILS id
                 JOIN Products p ON id.PRODUCT_NO = p.PRODUCT_NO
                 LEFT JOIN Product_Type pt ON p.PRODUCTTYPE = pt.PRODUCTTYPE_ID
                 JOIN INVOICES i ON id.INVOICENO = i.INVOICENO
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                       AND TO_DATE(:end_date, 'YYYY-MM-DD')
                 GROUP BY p.PRODUCTNAME, pt.PRODUCTTYPE_NAME
@@ -102,7 +110,7 @@ function getSalesReportData() {
         $stmt = $db->query($sql, $params);
         $top_products = $db->fetchAll($stmt);
         
-        // Detailed data with profit information
+        // Detailed data with profit information including discount calculations
         $sql = "SELECT 
                     TO_CHAR(i.INVOICE_DATE, 'YYYY-MM-DD') as invoice_date,
                     i.INVOICENO as invoice_no,
@@ -112,9 +120,11 @@ function getSalesReportData() {
                     j.JOB_TITLE as employee_job,
                     i.INVOICE_STATUS as status,
                     NVL(c.DISCOUNT, 0) as client_discount,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as amount,
+                    NVL(SUM(id.QTY * id.PRICE), 0) as gross_amount,
+                    NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as discount_amount,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as amount,
                     NVL(SUM(id.QTY * p.COST_PRICE), 0) as cost,
-                    NVL(SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE), 0) as profit,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as profit,
                     COUNT(id.PRODUCT_NO) as items_count
                 FROM INVOICES i
                 LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
@@ -306,9 +316,10 @@ function getClientReportData() {
                 LEFT JOIN (
                     SELECT 
                         i.CLIENT_NO,
-                        SUM(id.QTY * id.PRICE) as total_revenue
+                        SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) as total_revenue
                     FROM INVOICES i
                     LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
+                    LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                     WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                           AND TO_DATE(:end_date, 'YYYY-MM-DD')
                     GROUP BY i.CLIENT_NO
@@ -319,18 +330,20 @@ function getClientReportData() {
         $stmt = $db->query($sql, $params);
         $client_summary = $db->fetchOne($stmt);
         
-        // Top clients by revenue with enhanced metrics
+        // Top clients by revenue with enhanced metrics including discounts
         $sql = "SELECT 
                     c.CLIENTNAME as client_name,
                     ct.TYPE_NAME as client_type,
                     c.CITY as city,
                     c.DISCOUNT as client_discount,
                     ct.DISCOUNT_RATE as type_discount,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as revenue,
+                    NVL(SUM(id.QTY * id.PRICE), 0) as gross_revenue,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as revenue,
+                    NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as discount_given,
                     NVL(SUM(id.QTY * p.COST_PRICE), 0) as cost,
-                    NVL(SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE), 0) as profit,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as profit,
                     COUNT(DISTINCT i.INVOICENO) as order_count,
-                    NVL(AVG(id.QTY * id.PRICE), 0) as avg_order_value
+                    NVL(AVG((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as avg_order_value
                 FROM Clients c
                 LEFT JOIN Client_Type ct ON c.CLIENT_TYPE = ct.CLIENT_TYPE
                 LEFT JOIN INVOICES i ON c.CLIENT_NO = i.CLIENT_NO
@@ -339,7 +352,7 @@ function getClientReportData() {
                 WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                       AND TO_DATE(:end_date, 'YYYY-MM-DD')
                 GROUP BY c.CLIENTNAME, ct.TYPE_NAME, c.CITY, c.DISCOUNT, ct.DISCOUNT_RATE
-                HAVING SUM(id.QTY * id.PRICE) > 0
+                HAVING SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) > 0
                 ORDER BY revenue DESC
                 FETCH FIRST 10 ROWS ONLY";
         
@@ -473,9 +486,10 @@ function getEmployeeReportData() {
                 LEFT JOIN (
                     SELECT 
                         i.EMPLOYEEID,
-                        SUM(id.QTY * id.PRICE) as revenue
+                        SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) as revenue
                     FROM INVOICES i
                     LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
+                    LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                     WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                           AND TO_DATE(:end_date, 'YYYY-MM-DD')
                     GROUP BY i.EMPLOYEEID
@@ -486,15 +500,15 @@ function getEmployeeReportData() {
         $stmt = $db->query($sql, $params);
         $employee_summary = $db->fetchOne($stmt);
         
-        // Job title performance analysis
+        // Job title performance analysis including discounts
         $sql = "SELECT 
                     j.JOB_TITLE as job_title,
                     j.MIN_SALARY as min_salary,
                     j.MAX_SALARY as max_salary,
                     COUNT(e.EMPLOYEEID) as employee_count,
                     NVL(AVG(e.SALARY), 0) as avg_actual_salary,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as total_revenue,
-                    NVL(AVG(id.QTY * id.PRICE), 0) as avg_revenue_per_employee,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as total_revenue,
+                    NVL(AVG((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as avg_revenue_per_employee,
                     COUNT(DISTINCT i.INVOICENO) as total_orders
                 FROM JOBS j
                 LEFT JOIN Employees e ON j.JOB_ID = e.JOB_ID
@@ -502,6 +516,7 @@ function getEmployeeReportData() {
                     AND i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                     AND TO_DATE(:end_date, 'YYYY-MM-DD')
                 LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 GROUP BY j.JOB_TITLE, j.MIN_SALARY, j.MAX_SALARY
                 HAVING COUNT(e.EMPLOYEEID) > 0
                 ORDER BY total_revenue DESC";
@@ -655,18 +670,20 @@ function getFinancialReportData() {
         $start_date = $_GET['start_date'] ?? date('Y-m-d', strtotime('-30 days'));
         $end_date = $_GET['end_date'] ?? date('Y-m-d');
         
-        // Financial overview summary
+        // Financial overview summary including client discounts
         $sql = "SELECT 
-                    NVL(SUM(id.QTY * id.PRICE), 0) as total_revenue,
+                    NVL(SUM(id.QTY * id.PRICE), 0) as total_gross_revenue,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as total_revenue,
+                    NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as total_discounts_given,
                     NVL(SUM(id.QTY * p.COST_PRICE), 0) as total_cogs,
-                    NVL(SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE), 0) as gross_profit,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as gross_profit,
                     NVL(SUM(e.SALARY / 12), 0) as monthly_payroll_cost,
                     CASE 
-                        WHEN SUM(id.QTY * id.PRICE) > 0 
-                        THEN ROUND(((SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE)) / SUM(id.QTY * id.PRICE)) * 100, 2)
+                        WHEN SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) > 0 
+                        THEN ROUND(((SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE)) / SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100))) * 100, 2)
                         ELSE 0 
                     END as gross_margin_percent,
-                    NVL(AVG(id.QTY * id.PRICE), 0) as avg_transaction_value,
+                    NVL(AVG((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as avg_transaction_value,
                     COUNT(DISTINCT i.INVOICENO) as total_transactions,
                     COUNT(DISTINCT i.CLIENT_NO) as unique_customers,
                     NVL(SUM(id.QTY), 0) as total_units_sold
@@ -674,6 +691,7 @@ function getFinancialReportData() {
                 LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
                 LEFT JOIN Products p ON id.PRODUCT_NO = p.PRODUCT_NO
                 LEFT JOIN Employees e ON i.EMPLOYEEID = e.EMPLOYEEID
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                       AND TO_DATE(:end_date, 'YYYY-MM-DD')";
         
@@ -681,17 +699,19 @@ function getFinancialReportData() {
         $stmt = $db->query($sql, $params);
         $financial_summary = $db->fetchOne($stmt);
         
-        // Monthly financial trends
+        // Monthly financial trends including discounts
         $sql = "SELECT 
                     TO_CHAR(i.INVOICE_DATE, 'YYYY-MM') as month,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as monthly_revenue,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as monthly_revenue,
+                    NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as monthly_discounts,
                     NVL(SUM(id.QTY * p.COST_PRICE), 0) as monthly_cogs,
-                    NVL(SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE), 0) as monthly_profit,
+                    NVL(SUM((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as monthly_profit,
                     COUNT(DISTINCT i.INVOICENO) as monthly_transactions,
-                    NVL(AVG(id.QTY * id.PRICE), 0) as avg_order_value
+                    NVL(AVG((id.QTY * id.PRICE) * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as avg_order_value
                 FROM INVOICES i
                 LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
                 LEFT JOIN Products p ON id.PRODUCT_NO = p.PRODUCT_NO
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                       AND TO_DATE(:end_date, 'YYYY-MM-DD')
                 GROUP BY TO_CHAR(i.INVOICE_DATE, 'YYYY-MM')
@@ -928,8 +948,9 @@ if (isset($_GET['start_date']) && isset($_GET['end_date'])) {
                 <div class="card-body">
                     <div class="d-flex justify-content-between">
                         <div>
-                            <h6 class="text-primary mb-1">Total Revenue</h6>
+                            <h6 class="text-primary mb-1">Net Revenue</h6>
                             <h4 class="mb-0" id="total-revenue">Loading...</h4>
+                            <small class="text-muted">Gross: <span id="gross-revenue">$0</span></small>
                         </div>
                         <div class="text-primary">
                             <i class="fas fa-dollar-sign fa-2x"></i>
@@ -973,11 +994,12 @@ if (isset($_GET['start_date']) && isset($_GET['end_date'])) {
                 <div class="card-body">
                     <div class="d-flex justify-content-between">
                         <div>
-                            <h6 class="text-warning mb-1">Low Stock Items</h6>
-                            <h4 class="mb-0" id="low-stock">Loading...</h4>
+                            <h6 class="text-warning mb-1">Total Discounts</h6>
+                            <h4 class="mb-0" id="total-discounts">Loading...</h4>
+                            <small class="text-muted">Given to clients</small>
                         </div>
                         <div class="text-warning">
-                            <i class="fas fa-exclamation-triangle fa-2x"></i>
+                            <i class="fas fa-percentage fa-2x"></i>
                         </div>
                     </div>
                 </div>
@@ -1066,11 +1088,14 @@ if (isset($_GET['start_date']) && isset($_GET['end_date'])) {
                                                             <th>Client</th>
                                                             <th>Employee</th>
                                                             <th>Status</th>
-                                                            <th>Amount</th>
+                                                            <th>Subtotal</th>
+                                                            <th>Discount %</th>
+                                                            <th>Discount Amount</th>
+                                                            <th>Final Total</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody id="salesTableBody">
-                                                        <tr><td colspan="6" class="text-center">Loading...</td></tr>
+                                                        <tr><td colspan="9" class="text-center">Loading...</td></tr>
                                                     </tbody>
                                                 </table>
                                             </div>
@@ -1437,6 +1462,8 @@ function loadSummaryData() {
             if (data.success && data.summary) {
                 // Oracle returns uppercase field names
                 document.getElementById('total-revenue').textContent = '$' + (data.summary.TOTAL_REVENUE || 0).toLocaleString();
+                document.getElementById('gross-revenue').textContent = '$' + (data.summary.TOTAL_GROSS_REVENUE || 0).toLocaleString();
+                document.getElementById('total-discounts').textContent = '$' + (data.summary.TOTAL_DISCOUNT_GIVEN || 0).toLocaleString();
                 document.getElementById('total-invoices').textContent = data.summary.TOTAL_INVOICES || 0;
                 document.getElementById('active-clients').textContent = data.summary.ACTIVE_CLIENTS || 0;
             } else {
@@ -1838,13 +1865,21 @@ function updateEmployeeChart(data) {
 // Financial chart functions
 function updateFinancialSummary(data) {
     if (data && typeof data === 'object') {
-        // Oracle returns uppercase field names
+        // Oracle returns uppercase field names - updated for discount-aware calculations
         const grossProfit = parseFloat(data.TOTAL_REVENUE || 0) - parseFloat(data.TOTAL_COGS || 0);
         document.getElementById('gross-profit').textContent = '$' + grossProfit.toLocaleString();
         document.getElementById('gross-margin').textContent = (data.GROSS_MARGIN_PERCENT || 0) + '%';
         document.getElementById('total-cogs').textContent = '$' + parseFloat(data.TOTAL_COGS || 0).toLocaleString();
         document.getElementById('avg-transaction').textContent = '$' + parseFloat(data.AVG_TRANSACTION_VALUE || 0).toLocaleString();
         document.getElementById('total-units').textContent = parseInt(data.TOTAL_UNITS_SOLD || 0).toLocaleString();
+        
+        // Update discount-specific fields if elements exist
+        if (document.getElementById('total-gross-revenue')) {
+            document.getElementById('total-gross-revenue').textContent = '$' + parseFloat(data.TOTAL_GROSS_REVENUE || 0).toLocaleString();
+        }
+        if (document.getElementById('total-discounts-given')) {
+            document.getElementById('total-discounts-given').textContent = '$' + parseFloat(data.TOTAL_DISCOUNTS_GIVEN || 0).toLocaleString();
+        }
     }
 }
 
@@ -2040,21 +2075,28 @@ function updateSalesTable(data) {
     tbody.innerHTML = '';
     
     if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No sales data available for the selected date range</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No sales data available for the selected date range</td></tr>';
         return;
     }
     
     data.forEach(row => {
         const tr = document.createElement('tr');
         // Oracle returns uppercase field names
+        const discount = parseFloat(row.CLIENT_DISCOUNT || 0);
+        const discountAmount = parseFloat(row.DISCOUNT_AMOUNT || 0);
+        const grossAmount = parseFloat(row.GROSS_AMOUNT || 0);
+        
         tr.innerHTML = `
             <td>${new Date(row.INVOICE_DATE).toLocaleDateString()}</td>
             <td>${row.INVOICE_NO}</td>
             <td>${row.CLIENT_NAME}<br><small class="text-muted">${row.CLIENT_TYPE || ''}</small></td>
             <td>${row.EMPLOYEE_NAME}<br><small class="text-muted">${row.EMPLOYEE_JOB || ''}</small></td>
             <td><span class="badge bg-${getStatusColor(row.STATUS)}">${row.STATUS}</span></td>
-            <td>$${parseFloat(row.AMOUNT || 0).toLocaleString()}<br>
-                <small class="text-success">Profit: $${parseFloat(row.PROFIT || 0).toLocaleString()}</small></td>
+            <td>$${grossAmount.toLocaleString()}</td>
+            <td>${discount > 0 ? `<span class="badge bg-warning text-dark">${discount.toFixed(1)}%</span>` : '<span class="text-muted">0%</span>'}</td>
+            <td>${discountAmount > 0 ? `<span class="text-danger">-$${discountAmount.toLocaleString()}</span>` : '<span class="text-muted">$0.00</span>'}</td>
+            <td><strong class="text-success">$${parseFloat(row.AMOUNT || 0).toLocaleString()}</strong><br>
+                <small class="text-info">Profit: $${parseFloat(row.PROFIT || 0).toLocaleString()}</small></td>
         `;
         tbody.appendChild(tr);
     });

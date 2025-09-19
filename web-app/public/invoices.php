@@ -156,6 +156,27 @@ function getInvoiceDetailsAjax($id) {
     }
 }
 
+function getClientDiscountAjax($clientNo) {
+    try {
+        $db = Database::getInstance();
+        $sql = "SELECT DISCOUNT FROM CLIENTS WHERE CLIENT_NO = :client_no";
+        $params = [':client_no' => $clientNo];
+        $stmt = $db->query($sql, $params);
+        $result = $db->fetchOne($stmt);
+        
+        $discount = $result['DISCOUNT'] ?? 0;
+        
+        header('Content-Type: application/json');
+        echo json_encode(['success' => true, 'discount' => $discount]);
+        exit;
+        
+    } catch (Exception $e) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        exit;
+    }
+}
+
 // Handle AJAX requests first (before any HTML output)
 if (isset($_GET['action'])) {
     switch ($_GET['action']) {
@@ -167,6 +188,11 @@ if (isset($_GET['action'])) {
         case 'get_invoice_details':
             if (isset($_GET['id'])) {
                 getInvoiceDetailsAjax($_GET['id']);
+            }
+            break;
+        case 'get_client_discount':
+            if (isset($_GET['client_no'])) {
+                getClientDiscountAjax($_GET['client_no']);
             }
             break;
         case 'delete':
@@ -188,6 +214,13 @@ function processAddInvoice($data) {
             header('Location: invoices.php');
             exit;
         }
+        
+        // Fetch client discount percentage
+        $sql = "SELECT DISCOUNT FROM CLIENTS WHERE CLIENT_NO = :client_no";
+        $params = [':client_no' => $data['client_no']];
+        $stmt = $db->query($sql, $params);
+        $clientResult = $db->fetchOne($stmt);
+        $clientDiscount = $clientResult['DISCOUNT'] ?? 0;
         
         // Validate invoice details - must have at least one valid item
         $validItems = 0;
@@ -242,6 +275,7 @@ function processAddInvoice($data) {
         $quantities = $data['quantities'];
         $prices = $data['prices'];
         $insertedItems = 0;
+        $subtotal = 0;
         
         for ($i = 0; $i < count($products); $i++) {
             if (!empty($products[$i]) && 
@@ -249,6 +283,10 @@ function processAddInvoice($data) {
                 !empty($prices[$i]) &&
                 $quantities[$i] > 0 &&
                 $prices[$i] >= 0) {
+                
+                // Calculate item total and add to subtotal
+                $itemTotal = $quantities[$i] * $prices[$i];
+                $subtotal += $itemTotal;
                 
                 $sql = "INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) 
                         VALUES (:invoice_no, :product_no, :qty, :price)";
@@ -265,13 +303,18 @@ function processAddInvoice($data) {
             }
         }
         
+        // Calculate discount amount and final total
+        $discountAmount = ($subtotal * $clientDiscount) / 100;
+        $finalTotal = $subtotal - $discountAmount;
+        
         // Final check to ensure we actually inserted items
         if ($insertedItems === 0) {
             throw new Exception("No valid invoice items were inserted. Invoice cannot be created without items.");
         }
         
         $db->commit();
-        setFlashMessage('Invoice created successfully!', 'success');
+        $discountInfo = $clientDiscount > 0 ? sprintf(" (Subtotal: $%.2f, Discount: %.1f%%, Final Total: $%.2f)", $subtotal, $clientDiscount, $finalTotal) : "";
+        setFlashMessage('Invoice created successfully!' . $discountInfo, 'success');
         
     } catch (Exception $e) {
         $db = Database::getInstance();
@@ -293,6 +336,13 @@ function processUpdateInvoice($data) {
             header('Location: invoices.php');
             exit;
         }
+        
+        // Fetch client discount percentage
+        $sql = "SELECT DISCOUNT FROM CLIENTS WHERE CLIENT_NO = :client_no";
+        $params = [':client_no' => $data['client_no']];
+        $stmt = $db->query($sql, $params);
+        $clientResult = $db->fetchOne($stmt);
+        $clientDiscount = $clientResult['DISCOUNT'] ?? 0;
         
         // Validate invoice details - must have at least one valid item
         $validItems = 0;
@@ -343,6 +393,7 @@ function processUpdateInvoice($data) {
         $quantities = $data['quantities'];
         $prices = $data['prices'];
         $insertedItems = 0;
+        $subtotal = 0;
         
         for ($i = 0; $i < count($products); $i++) {
             if (!empty($products[$i]) && 
@@ -350,6 +401,10 @@ function processUpdateInvoice($data) {
                 !empty($prices[$i]) &&
                 $quantities[$i] > 0 &&
                 $prices[$i] >= 0) {
+                
+                // Calculate item total and add to subtotal
+                $itemTotal = $quantities[$i] * $prices[$i];
+                $subtotal += $itemTotal;
                 
                 $sql = "INSERT INTO INVOICE_DETAILS (INVOICENO, PRODUCT_NO, QTY, PRICE) 
                         VALUES (:invoice_id, :product_no, :qty, :price)";
@@ -366,13 +421,18 @@ function processUpdateInvoice($data) {
             }
         }
         
+        // Calculate discount amount and final total
+        $discountAmount = ($subtotal * $clientDiscount) / 100;
+        $finalTotal = $subtotal - $discountAmount;
+        
         // Final check to ensure we actually inserted items
         if ($insertedItems === 0) {
             throw new Exception("No valid invoice items were inserted. Invoice cannot exist without items.");
         }
         
         $db->commit();
-        setFlashMessage('Invoice updated successfully!', 'success');
+        $discountInfo = $clientDiscount > 0 ? sprintf(" (Subtotal: $%.2f, Discount: %.1f%%, Final Total: $%.2f)", $subtotal, $clientDiscount, $finalTotal) : "";
+        setFlashMessage('Invoice updated successfully!' . $discountInfo, 'success');
         
     } catch (Exception $e) {
         $db = Database::getInstance();
@@ -439,14 +499,17 @@ $products = getAllProducts();
                             <table id="invoicesTable" class="table table-hover data-table">
                                 <thead>
                                     <tr>
-                                        <th>Invoice No</th>
-                                        <th>Date</th>
-                                        <th>Client</th>
-                                        <th>Employee</th>
-                                        <th>Status</th>
-                                        <th>Total Amount</th>
-                                        <th>Items</th>
-                                        <th>Actions</th>
+                                        <th style="min-width: 100px;">Invoice No</th>
+                                        <th style="min-width: 100px;">Date</th>
+                                        <th style="min-width: 120px;">Client</th>
+                                        <th style="min-width: 120px;">Employee</th>
+                                        <th style="min-width: 90px;">Status</th>
+                                        <th style="min-width: 100px;">Subtotal</th>
+                                        <th style="min-width: 90px;">Discount %</th>
+                                        <th style="min-width: 110px;">Discount Amount</th>
+                                        <th style="min-width: 110px;">Final Total</th>
+                                        <th style="min-width: 80px;">Items</th>
+                                        <th style="min-width: 130px;">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -462,7 +525,28 @@ $products = getAllProducts();
                                                 </span>
                                             </td>
                                             <td>
-                                                <strong>$<?php echo number_format($invoice['TOTAL_AMOUNT'] ?? 0, 2); ?></strong>
+                                                $<?php echo number_format($invoice['SUBTOTAL_AMOUNT'] ?? 0, 2); ?>
+                                            </td>
+                                            <td>
+                                                <?php 
+                                                $discount = $invoice['CLIENT_DISCOUNT'] ?? 0;
+                                                if ($discount > 0): ?>
+                                                    <span class="badge bg-warning text-dark"><?php echo number_format($discount, 1); ?>%</span>
+                                                <?php else: ?>
+                                                    <span class="text-muted">0%</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <?php 
+                                                $discountAmount = $invoice['DISCOUNT_AMOUNT'] ?? 0;
+                                                if ($discountAmount > 0): ?>
+                                                    <span class="text-danger">-$<?php echo number_format($discountAmount, 2); ?></span>
+                                                <?php else: ?>
+                                                    <span class="text-muted">$0.00</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <strong class="text-success">$<?php echo number_format($invoice['FINAL_TOTAL'] ?? 0, 2); ?></strong>
                                             </td>
                                             <td>
                                                 <span class="badge bg-info">
@@ -618,7 +702,14 @@ $products = getAllProducts();
                         <div class="col-md-4">
                             <div class="card">
                                 <div class="card-body">
-                                    <h6>Invoice Total: <span id="invoice-total" class="text-success">$0.00</span></h6>
+                                    <div class="small text-muted mb-1">
+                                        <div>Subtotal: <span id="invoice-subtotal">$0.00</span></div>
+                                        <div id="discount-info" style="display: none;">
+                                            Discount (<span id="discount-percent">0</span>%): 
+                                            -<span id="discount-amount">$0.00</span>
+                                        </div>
+                                    </div>
+                                    <h6>Total: <span id="invoice-total" class="text-success">$0.00</span></h6>
                                 </div>
                             </div>
                         </div>
@@ -657,6 +748,9 @@ function resetForm() {
     document.querySelector('#invoiceModal .modal-title').textContent = 'Add Invoice';
     document.querySelector('input[name="action"]').value = 'add';
     document.getElementById('invoice_date').value = new Date().toISOString().split('T')[0];
+    
+    // Reset discount information
+    clientDiscount = 0;
     
     // Reset to single item
     const itemsContainer = document.getElementById('invoice-items');
@@ -759,15 +853,68 @@ function calculateLineTotal(element) {
     calculateInvoiceTotal();
 }
 
+let clientDiscount = 0; // Global variable to store client discount
+
 function calculateInvoiceTotal() {
-    let total = 0;
+    let subtotal = 0;
     document.querySelectorAll('.line-total').forEach(function(element) {
         const value = element.value.replace('$', '');
-        total += parseFloat(value) || 0;
+        subtotal += parseFloat(value) || 0;
     });
     
-    document.getElementById('invoice-total').textContent = '$' + total.toFixed(2);
+    // Calculate discount
+    const discountAmount = (subtotal * clientDiscount) / 100;
+    const finalTotal = subtotal - discountAmount;
+    
+    // Update display
+    document.getElementById('invoice-subtotal').textContent = '$' + subtotal.toFixed(2);
+    document.getElementById('invoice-total').textContent = '$' + finalTotal.toFixed(2);
+    
+    // Show/hide discount info
+    const discountInfo = document.getElementById('discount-info');
+    if (clientDiscount > 0) {
+        document.getElementById('discount-percent').textContent = clientDiscount.toFixed(1);
+        document.getElementById('discount-amount').textContent = '$' + discountAmount.toFixed(2);
+        discountInfo.style.display = 'block';
+    } else {
+        discountInfo.style.display = 'none';
+    }
 }
+
+function fetchClientDiscount(clientNo) {
+    if (!clientNo) {
+        clientDiscount = 0;
+        calculateInvoiceTotal();
+        return;
+    }
+    
+    fetch(`invoices.php?action=get_client_discount&client_no=${clientNo}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                clientDiscount = parseFloat(data.discount) || 0;
+                calculateInvoiceTotal();
+            } else {
+                clientDiscount = 0;
+                calculateInvoiceTotal();
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching client discount:', error);
+            clientDiscount = 0;
+            calculateInvoiceTotal();
+        });
+}
+
+// Add event listener for client selection
+document.addEventListener('DOMContentLoaded', function() {
+    const clientSelect = document.getElementById('client_no');
+    if (clientSelect) {
+        clientSelect.addEventListener('change', function() {
+            fetchClientDiscount(this.value);
+        });
+    }
+});
 
 function editInvoice(invoiceId) {
     // Load invoice data via AJAX
@@ -815,6 +962,9 @@ function populateInvoiceForm(invoice, details) {
     document.getElementById('employee_id').value = invoice.EMPLOYEEID;
     document.getElementById('invoice_status').value = invoice.INVOICE_STATUS;
     document.getElementById('invoice_memo').value = invoice.INVOICEMEMO || '';
+    
+    // Fetch client discount for the selected client
+    fetchClientDiscount(invoice.CLIENT_NO);
     
     // Handle Oracle date format (DD-MON-YY or DD-MON-YYYY)
     let invoiceDate = invoice.INVOICE_DATE;
@@ -958,14 +1108,17 @@ function getAllInvoices() {
         // Only show invoices that have invoice details (business rule: no invoice without items)
         $sql = "SELECT i.INVOICENO, i.INVOICE_DATE, i.CLIENT_NO, i.EMPLOYEEID, i.INVOICE_STATUS, i.INVOICEMEMO,
                        c.CLIENTNAME as CLIENT_NAME, e.EMPLOYEENAME as EMPLOYEE_NAME,
-                       totals.TOTAL_AMOUNT,
-                       totals.ITEM_COUNT
+                       c.DISCOUNT as CLIENT_DISCOUNT,
+                       totals.SUBTOTAL_AMOUNT,
+                       totals.ITEM_COUNT,
+                       ROUND((totals.SUBTOTAL_AMOUNT * NVL(c.DISCOUNT, 0)) / 100, 2) as DISCOUNT_AMOUNT,
+                       ROUND(totals.SUBTOTAL_AMOUNT - ((totals.SUBTOTAL_AMOUNT * NVL(c.DISCOUNT, 0)) / 100), 2) as FINAL_TOTAL
                 FROM INVOICES i
                 LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 LEFT JOIN Employees e ON i.EMPLOYEEID = e.EMPLOYEEID
                 INNER JOIN (
                     SELECT INVOICENO, 
-                           SUM(QTY * PRICE) as TOTAL_AMOUNT,
+                           SUM(QTY * PRICE) as SUBTOTAL_AMOUNT,
                            COUNT(*) as ITEM_COUNT
                     FROM INVOICE_DETAILS 
                     GROUP BY INVOICENO
