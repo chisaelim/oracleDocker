@@ -184,12 +184,10 @@ DATABASE IS READY TO USE!
 
 ### **Entity Relationship Design**
 ```
-Client_Type ───── Clients ───┐
-                             │
+Client_Type ───── Clients ───┐                            
                              ├── Invoices ──┐           
                              │              │
-Jobs ───────── Employees ────┘              │
-                                            │
+Jobs ───────── Employees ────┘              │                                            
                                             │
                                             │
 Product_Type ─────── Products ─────── Invoice_Details
