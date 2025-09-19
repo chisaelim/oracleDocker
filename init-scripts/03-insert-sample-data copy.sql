@@ -5,14 +5,14 @@
 -- Note: This script handles auto-generated identity columns properly
 
 -- Clear existing data first (in dependency order)
-DELETE FROM INVOICE_DETAILS WHERE 1=1;
-DELETE FROM INVOICES WHERE 1=1;
-DELETE FROM Employees WHERE 1=1;
-DELETE FROM JOBS WHERE 1=1;
-DELETE FROM Products WHERE 1=1;
-DELETE FROM Product_Type WHERE 1=1;
-DELETE FROM Clients WHERE 1=1;
-DELETE FROM Client_Type WHERE 1=1;
+DELETE FROM INVOICE_DETAILS;
+DELETE FROM INVOICES;
+DELETE FROM Employees;
+DELETE FROM JOBS;
+DELETE FROM Products;
+DELETE FROM Product_Type;
+DELETE FROM Clients;
+DELETE FROM Client_Type;
 
 -- Commit the deletions
 COMMIT;

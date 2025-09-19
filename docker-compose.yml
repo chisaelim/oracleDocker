@@ -1,58 +1,38 @@
+# Minimal docker-compose for Oracle DB and PHP web app
+version: '3.8'
 services:
+  # Oracle XE database container
   oracle-db:
     image: container-registry.oracle.com/database/express:21.3.0-xe
     container_name: oracle-xe-db
-    restart: unless-stopped
     ports:
-      - "1522:1521"
-      - "5501:5500"  # Oracle Enterprise Manager Express
+      - "1522:1521" # Oracle DB port
     environment:
-      - ORACLE_PWD=${ORACLE_PWD:-Oracle123}
-      - ORACLE_CHARACTERSET=AL32UTF8
+      - ORACLE_PWD=Oracle123 # Set your Oracle password
     volumes:
-      - oracle-data:/opt/oracle/oradata
-      - ./init-scripts:/docker-entrypoint-initdb.d/startup
-      - ./init-scripts:/opt/oracle/scripts/startup
-    healthcheck:
-      test: ["CMD", "sqlplus", "-L", "system/$$ORACLE_PWD@//localhost:1521/XE", "@/dev/null"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
+      - oracle-data:/opt/oracle/oradata # Persist database data
+      - ./init-scripts:/docker-entrypoint-initdb.d/startup # Init scripts
     networks:
       - oracle-network
 
+  # PHP web application container
   web-app:
-    build: 
-      context: ./web-app
-      dockerfile: Dockerfile
+    build: ./web-app
     container_name: php-web-app
-    restart: unless-stopped
     ports:
-      - "8090:80"
+      - "8090:80" # Expose web app on host port 8090
     depends_on:
-      - oracle-db
-    environment:
-      - PHP_TIMEZONE=UTC
-      - APACHE_DOCUMENT_ROOT=/var/www/html
+      - oracle-db # Ensure DB starts first
     volumes:
       - ./web-app/public:/var/www/html
       - ./web-app/config:/var/www/html/config
       - ./web-app/includes:/var/www/html/includes
       - ./web-app/assets:/var/www/html/assets
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/database_info.php"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
     networks:
       - oracle-network
 
 volumes:
   oracle-data:
-    driver: local
 
 networks:
   oracle-network:
-    driver: bridge
