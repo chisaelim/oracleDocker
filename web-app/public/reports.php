@@ -63,7 +63,7 @@ function getSalesReportData() {
         // Enhanced status distribution with amounts
         $sql = "SELECT 
                     NVL(i.INVOICE_STATUS, 'Unknown') as invoice_status,
-                    COUNT(*) as status_count,
+                    COUNT(DISTINCT i.INVOICENO) as status_count,
                     NVL(SUM(id.QTY * id.PRICE), 0) as status_revenue
                 FROM INVOICES i
                 LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
