@@ -37,7 +37,7 @@ function getInvoiceDetailsAjax($id) {
         $db = Database::getInstance();
         
         // Get invoice with client and employee info
-        $sql = "SELECT i.*, c.CLIENTNAME, e.EMPLOYEENAME 
+        $sql = "SELECT i.*, c.CLIENTNAME, c.DISCOUNT as CLIENT_DISCOUNT, e.EMPLOYEENAME 
                 FROM INVOICES i
                 LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 LEFT JOIN Employees e ON i.EMPLOYEEID = e.EMPLOYEEID
@@ -55,10 +55,15 @@ function getInvoiceDetailsAjax($id) {
         $stmt = $db->query($sql, $params);
         $details = $db->fetchAll($stmt);
         
-        $total = 0;
+        // Calculate subtotal and discount
+        $subtotal = 0;
         foreach ($details as $row) {
-            $total += $row['QTY'] * $row['PRICE'];
+            $subtotal += $row['QTY'] * $row['PRICE'];
         }
+        
+        $clientDiscount = $invoice['CLIENT_DISCOUNT'] ?? 0;
+        $discountAmount = ($subtotal * $clientDiscount) / 100;
+        $finalTotal = $subtotal - $discountAmount;
         
         // Generate clean HTML without navbar for viewing
         ?>
@@ -129,9 +134,24 @@ function getInvoiceDetailsAjax($id) {
                         </tbody>
                         <tfoot class="table-secondary">
                             <tr>
-                                <th colspan="3" class="text-end">Grand Total:</th>
-                                <th class="text-end">$<?php echo number_format($total, 2); ?></th>
+                                <th colspan="3" class="text-end">Subtotal:</th>
+                                <th class="text-end">$<?php echo number_format($subtotal, 2); ?></th>
                             </tr>
+                            <?php if ($clientDiscount > 0): ?>
+                            <tr>
+                                <th colspan="3" class="text-end">Discount (<?php echo number_format($clientDiscount, 1); ?>%):</th>
+                                <th class="text-end text-danger">-$<?php echo number_format($discountAmount, 2); ?></th>
+                            </tr>
+                            <tr class="table-success">
+                                <th colspan="3" class="text-end">Grand Total:</th>
+                                <th class="text-end">$<?php echo number_format($finalTotal, 2); ?></th>
+                            </tr>
+                            <?php else: ?>
+                            <tr class="table-success">
+                                <th colspan="3" class="text-end">Grand Total:</th>
+                                <th class="text-end">$<?php echo number_format($subtotal, 2); ?></th>
+                            </tr>
+                            <?php endif; ?>
                         </tfoot>
                     </table>
                 </div>
