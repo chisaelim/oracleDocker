@@ -233,9 +233,11 @@ function getInventoryReportData() {
                     p.COST_PRICE as unit_cost,
                     p.PROFIT_PERCENT as profit_margin,
                     NVL(SUM(id.QTY), 0) as units_sold,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as revenue,
+                    NVL(SUM(id.QTY * id.PRICE), 0) as gross_revenue,
+                    NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as discount_given,
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as revenue,
                     NVL(SUM(id.QTY * p.COST_PRICE), 0) as cost_of_goods_sold,
-                    NVL(SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE), 0) as gross_profit,
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as gross_profit,
                     CASE 
                         WHEN p.QTY_ON_HAND > 0 AND SUM(id.QTY) > 0 
                         THEN ROUND(SUM(id.QTY) / p.QTY_ON_HAND, 2)
@@ -251,6 +253,7 @@ function getInventoryReportData() {
                 LEFT JOIN INVOICE_DETAILS id ON p.PRODUCT_NO = id.PRODUCT_NO
                 LEFT JOIN INVOICES i ON id.INVOICENO = i.INVOICENO 
                     AND i.INVOICE_DATE >= SYSDATE - 365
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 GROUP BY p.PRODUCTNAME, pt.PRODUCTTYPE_NAME, p.QTY_ON_HAND, 
                          p.REORDER_LEVEL, p.SELL_PRICE, p.COST_PRICE, p.PROFIT_PERCENT
                 ORDER BY revenue DESC";
@@ -262,11 +265,12 @@ function getInventoryReportData() {
         $sql = "SELECT 
                     p.PRODUCTNAME as product_name,
                     NVL(SUM(id.QTY), 0) as units_sold,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as revenue
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as revenue
                 FROM Products p
                 LEFT JOIN INVOICE_DETAILS id ON p.PRODUCT_NO = id.PRODUCT_NO
                 LEFT JOIN INVOICES i ON id.INVOICENO = i.INVOICENO 
                     AND i.INVOICE_DATE >= SYSDATE - 90
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 GROUP BY p.PRODUCTNAME
                 HAVING SUM(id.QTY) > 0
                 ORDER BY revenue DESC
@@ -371,8 +375,8 @@ function getClientReportData() {
                     ct.DISCOUNT_RATE as type_discount,
                     COUNT(c.CLIENT_NO) as client_count,
                     COUNT(DISTINCT CASE WHEN i.INVOICE_DATE >= SYSDATE - 90 THEN c.CLIENT_NO END) as active_count,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as type_revenue,
-                    NVL(AVG(id.QTY * id.PRICE), 0) as avg_order_value
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as type_revenue,
+                    NVL(AVG(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as avg_order_value
                 FROM Client_Type ct
                 LEFT JOIN Clients c ON ct.CLIENT_TYPE = c.CLIENT_TYPE
                 LEFT JOIN INVOICES i ON c.CLIENT_NO = i.CLIENT_NO 
@@ -396,7 +400,7 @@ function getClientReportData() {
         $sql = "SELECT 
                     NVL(c.CITY, 'Unknown') as city,
                     COUNT(c.CLIENT_NO) as client_count,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as city_revenue
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as city_revenue
                 FROM Clients c
                 LEFT JOIN INVOICES i ON c.CLIENT_NO = i.CLIENT_NO 
                     AND i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
@@ -424,11 +428,17 @@ function getClientReportData() {
                     c.PHONE as phone,
                     c.DISCOUNT as personal_discount,
                     ct.DISCOUNT_RATE as type_discount,
-                    COUNT(i.INVOICENO) as total_orders,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as total_revenue,
+                    COUNT(DISTINCT i.INVOICENO) as total_orders,
+                    NVL(SUM(id.QTY * id.PRICE), 0) as total_gross_revenue,
+                    NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as total_discount_given,
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as total_revenue,
                     NVL(SUM(id.QTY * p.COST_PRICE), 0) as total_cost,
-                    NVL(SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE), 0) as total_profit,
-                    NVL(AVG(id.QTY * id.PRICE), 0) as avg_order_value,
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as total_profit,
+                    CASE 
+                        WHEN COUNT(DISTINCT i.INVOICENO) > 0 
+                        THEN ROUND(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) / COUNT(DISTINCT i.INVOICENO), 2)
+                        ELSE 0 
+                    END as avg_order_value,
                     MIN(i.INVOICE_DATE) as first_order,
                     MAX(i.INVOICE_DATE) as last_order,
                     CASE 
@@ -529,14 +539,14 @@ function getEmployeeReportData() {
                     e.EMPLOYEENAME as employee_name,
                     j.JOB_TITLE as job_title,
                     e.SALARY as salary,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as revenue,
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as revenue,
                     NVL(SUM(id.QTY * p.COST_PRICE), 0) as cost,
-                    NVL(SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE), 0) as profit,
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as profit,
                     COUNT(DISTINCT i.INVOICENO) as orders_handled,
                     COUNT(DISTINCT i.CLIENT_NO) as clients_served,
                     CASE 
-                        WHEN e.SALARY > 0 AND SUM(id.QTY * id.PRICE) > 0 
-                        THEN ROUND(SUM(id.QTY * id.PRICE) / (e.SALARY / 12), 2)
+                        WHEN e.SALARY > 0 AND SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) > 0 
+                        THEN ROUND(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) / (e.SALARY / 12), 2)
                         ELSE 0 
                     END as revenue_to_salary_ratio
                 FROM Employees e
@@ -544,10 +554,11 @@ function getEmployeeReportData() {
                 LEFT JOIN INVOICES i ON e.EMPLOYEEID = i.EMPLOYEEID
                 LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
                 LEFT JOIN Products p ON id.PRODUCT_NO = p.PRODUCT_NO
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                       AND TO_DATE(:end_date, 'YYYY-MM-DD')
                 GROUP BY e.EMPLOYEENAME, j.JOB_TITLE, e.SALARY
-                HAVING SUM(id.QTY * id.PRICE) > 0
+                HAVING SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) > 0
                 ORDER BY revenue DESC";
         
         $stmt = $db->query($sql, $params);
@@ -575,10 +586,10 @@ function getEmployeeReportData() {
                     j.JOB_TITLE as job_title,
                     COUNT(e.EMPLOYEEID) as employee_count,
                     NVL(AVG(e.SALARY), 0) as avg_salary,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as total_revenue,
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as total_revenue,
                     CASE 
                         WHEN AVG(e.SALARY) > 0 
-                        THEN ROUND(SUM(id.QTY * id.PRICE) / AVG(e.SALARY), 2)
+                        THEN ROUND(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) / AVG(e.SALARY), 2)
                         ELSE 0 
                     END as revenue_per_salary_dollar
                 FROM JOBS j
@@ -587,6 +598,7 @@ function getEmployeeReportData() {
                     AND i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                     AND TO_DATE(:end_date, 'YYYY-MM-DD')
                 LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 GROUP BY j.JOB_TITLE
                 HAVING COUNT(e.EMPLOYEEID) > 0
                 ORDER BY revenue_per_salary_dollar DESC";
@@ -609,27 +621,29 @@ function getEmployeeReportData() {
                     ROUND((SYSDATE - e.BIRTHDATE) / 365.25, 1) as age,
                     e.SALARY as annual_salary,
                     ROUND(e.SALARY / 12, 2) as monthly_salary,
-                    COUNT(i.INVOICENO) as total_sales,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as revenue,
+                    COUNT(DISTINCT i.INVOICENO) as total_sales,
+                    NVL(SUM(id.QTY * id.PRICE), 0) as gross_revenue,
+                    NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as discount_given,
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as revenue,
                     NVL(SUM(id.QTY * p.COST_PRICE), 0) as cost,
-                    NVL(SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE), 0) as profit,
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as profit,
                     CASE 
-                        WHEN COUNT(i.INVOICENO) > 0 
-                        THEN ROUND(SUM(id.QTY * id.PRICE) / COUNT(i.INVOICENO), 2)
+                        WHEN COUNT(DISTINCT i.INVOICENO) > 0 
+                        THEN ROUND(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) / COUNT(DISTINCT i.INVOICENO), 2)
                         ELSE 0 
                     END as avg_order_value,
                     COUNT(DISTINCT i.CLIENT_NO) as clients_served,
                     CASE 
                         WHEN e.SALARY > 0 
-                        THEN ROUND((SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE)) / (e.SALARY / 12), 2)
+                        THEN ROUND((SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE)) / (e.SALARY / 12), 2)
                         ELSE 0 
                     END as monthly_roi_ratio,
                     CASE 
-                        WHEN NVL(SUM(id.QTY * id.PRICE), 0) > 50000 THEN 'Excellent'
-                        WHEN NVL(SUM(id.QTY * id.PRICE), 0) > 25000 THEN 'Very Good'
-                        WHEN NVL(SUM(id.QTY * id.PRICE), 0) > 10000 THEN 'Good'
-                        WHEN NVL(SUM(id.QTY * id.PRICE), 0) > 5000 THEN 'Average'
-                        WHEN NVL(SUM(id.QTY * id.PRICE), 0) > 0 THEN 'Below Average'
+                        WHEN NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) > 50000 THEN 'Excellent'
+                        WHEN NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) > 25000 THEN 'Very Good'
+                        WHEN NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) > 10000 THEN 'Good'
+                        WHEN NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) > 5000 THEN 'Average'
+                        WHEN NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) > 0 THEN 'Below Average'
                         ELSE 'No Sales'
                     END as performance_rating
                 FROM Employees e
@@ -637,6 +651,7 @@ function getEmployeeReportData() {
                 LEFT JOIN INVOICES i ON e.EMPLOYEEID = i.EMPLOYEEID
                 LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
                 LEFT JOIN Products p ON id.PRODUCT_NO = p.PRODUCT_NO
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                       AND TO_DATE(:end_date, 'YYYY-MM-DD')
                 GROUP BY e.EMPLOYEENAME, j.JOB_TITLE, e.GENDER, e.BIRTHDATE, e.SALARY
@@ -731,13 +746,15 @@ function getFinancialReportData() {
         // Product category profitability
         $sql = "SELECT 
                     pt.PRODUCTTYPE_NAME as category,
-                    NVL(SUM(id.QTY * id.PRICE), 0) as category_revenue,
+                    NVL(SUM(id.QTY * id.PRICE), 0) as category_gross_revenue,
+                    NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as category_discount_given,
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as category_revenue,
                     NVL(SUM(id.QTY * p.COST_PRICE), 0) as category_cogs,
-                    NVL(SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE), 0) as category_profit,
+                    NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as category_profit,
                     NVL(SUM(id.QTY), 0) as units_sold,
                     CASE 
-                        WHEN SUM(id.QTY * id.PRICE) > 0 
-                        THEN ROUND(((SUM(id.QTY * id.PRICE) - SUM(id.QTY * p.COST_PRICE)) / SUM(id.QTY * id.PRICE)) * 100, 2)
+                        WHEN SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) > 0 
+                        THEN ROUND(((SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE)) / SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100))) * 100, 2)
                         ELSE 0 
                     END as profit_margin_percent,
                     COUNT(DISTINCT p.PRODUCT_NO) as products_in_category
@@ -745,6 +762,7 @@ function getFinancialReportData() {
                 LEFT JOIN Products p ON pt.PRODUCTTYPE_ID = p.PRODUCTTYPE
                 LEFT JOIN INVOICE_DETAILS id ON p.PRODUCT_NO = id.PRODUCT_NO
                 LEFT JOIN INVOICES i ON id.INVOICENO = i.INVOICENO
+                LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                       AND TO_DATE(:end_date, 'YYYY-MM-DD')
                 GROUP BY pt.PRODUCTTYPE_NAME
@@ -2122,8 +2140,12 @@ function updateInventoryTable(data) {
             <td><span class="${stockStatus}">${row.STOCK_LEVEL}</span></td>
             <td>${row.REORDER_LEVEL}</td>
             <td>${row.UNITS_SOLD}<br><small class="text-muted">Turnover: ${row.TURNOVER_RATIO || 0}</small></td>
-            <td>$${parseFloat(row.REVENUE || 0).toLocaleString()}<br>
-                <small class="text-success">Profit: $${parseFloat(row.GROSS_PROFIT || 0).toLocaleString()}</small></td>
+            <td>
+                <strong>$${parseFloat(row.REVENUE || 0).toLocaleString()}</strong><br>
+                <small class="text-muted">Subtotal: $${parseFloat(row.GROSS_REVENUE || 0).toLocaleString()}</small><br>
+                <small class="text-warning">Discount: -$${parseFloat(row.DISCOUNT_GIVEN || 0).toLocaleString()}</small><br>
+                <small class="text-success">Profit: $${parseFloat(row.GROSS_PROFIT || 0).toLocaleString()}</small>
+            </td>
         `;
         tbody.appendChild(tr);
     });
@@ -2143,7 +2165,11 @@ function updateFinancialTable(data) {
         // Oracle returns uppercase field names
         tr.innerHTML = `
             <td>${row.CATEGORY}</td>
-            <td>$${parseFloat(row.CATEGORY_REVENUE || 0).toLocaleString()}</td>
+            <td>
+                <strong>$${parseFloat(row.CATEGORY_REVENUE || 0).toLocaleString()}</strong><br>
+                <small class="text-muted">Subtotal: $${parseFloat(row.CATEGORY_GROSS_REVENUE || 0).toLocaleString()}</small><br>
+                <small class="text-warning">Discount: -$${parseFloat(row.CATEGORY_DISCOUNT_GIVEN || 0).toLocaleString()}</small>
+            </td>
             <td>$${parseFloat(row.CATEGORY_COGS || 0).toLocaleString()}</td>
             <td>$${parseFloat(row.CATEGORY_PROFIT || 0).toLocaleString()}</td>
             <td><span class="badge bg-${getProfitMarginColor(row.PROFIT_MARGIN_PERCENT)}">${parseFloat(row.PROFIT_MARGIN_PERCENT || 0).toFixed(1)}%</span></td>
@@ -2173,7 +2199,12 @@ function updateClientTable(data) {
             <td>${row.CLIENT_NAME}<br><small class="text-muted">${row.CITY || ''} ${row.PHONE || ''}</small></td>
             <td>${row.CLIENT_TYPE}<br><small class="text-info">Discount: ${parseFloat(row.PERSONAL_DISCOUNT || row.TYPE_DISCOUNT || 0).toFixed(1)}%</small></td>
             <td>${row.TOTAL_ORDERS}<br><small class="text-muted">Avg: $${parseFloat(row.AVG_ORDER_VALUE || 0).toLocaleString()}</small></td>
-            <td>$${parseFloat(row.TOTAL_REVENUE || 0).toLocaleString()}<br><small class="text-success">Profit: $${parseFloat(row.TOTAL_PROFIT || 0).toLocaleString()}</small></td>
+            <td>
+                <strong>$${parseFloat(row.TOTAL_REVENUE || 0).toLocaleString()}</strong><br>
+                <small class="text-muted">Subtotal: $${parseFloat(row.TOTAL_GROSS_REVENUE || 0).toLocaleString()}</small><br>
+                <small class="text-warning">Discount: -$${parseFloat(row.TOTAL_DISCOUNT_GIVEN || 0).toLocaleString()}</small><br>
+                <small class="text-success">Profit: $${parseFloat(row.TOTAL_PROFIT || 0).toLocaleString()}</small>
+            </td>
             <td>${row.LAST_ORDER ? new Date(row.LAST_ORDER).toLocaleDateString() : 'N/A'}<br><small class="text-muted">${daysSince}</small></td>
             <td><span class="badge bg-${statusColor}">${row.LIFECYCLE_STATUS || row.STATUS}</span></td>
         `;
@@ -2200,7 +2231,12 @@ function updateEmployeeTable(data) {
             <td>${row.EMPLOYEE_NAME}<br><small class="text-muted">${row.GENDER || ''}, Age: ${row.AGE || 'N/A'}</small></td>
             <td>${row.JOB_TITLE}<br><small class="text-info">$${parseFloat(row.MONTHLY_SALARY || 0).toLocaleString()}/mo</small></td>
             <td>${row.TOTAL_SALES}<br><small class="text-muted">${row.CLIENTS_SERVED || 0} clients</small></td>
-            <td>$${parseFloat(row.REVENUE || 0).toLocaleString()}<br><small class="text-success">Profit: $${parseFloat(row.PROFIT || 0).toLocaleString()}</small></td>
+            <td>
+                <strong>$${parseFloat(row.REVENUE || 0).toLocaleString()}</strong><br>
+                <small class="text-muted">Subtotal: $${parseFloat(row.GROSS_REVENUE || 0).toLocaleString()}</small><br>
+                <small class="text-warning">Discount: -$${parseFloat(row.DISCOUNT_GIVEN || 0).toLocaleString()}</small><br>
+                <small class="text-success">Profit: $${parseFloat(row.PROFIT || 0).toLocaleString()}</small>
+            </td>
             <td>$${parseFloat(row.AVG_ORDER_VALUE || 0).toLocaleString()}<br><small class="text-info">ROI: <span class="badge bg-${roiColor}">${parseFloat(roiRatio).toFixed(1)}x</span></small></td>
             <td><span class="badge bg-${getPerformanceColor(row.PERFORMANCE_RATING || row.PERFORMANCE)}">${row.PERFORMANCE_RATING || row.PERFORMANCE}</span></td>
         `;
