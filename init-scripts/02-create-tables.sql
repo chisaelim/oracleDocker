@@ -185,4 +185,106 @@ CREATE TABLE INVOICE_DETAILS (
     FOREIGN KEY (PRODUCT_NO) REFERENCES Products(PRODUCT_NO)
 );
 
+-- CREATE TRIGGER TO AUTOMATICALLY UPDATE PRODUCT STOCK (QTY_ON_HAND)
+-- This trigger handles INSERT, UPDATE, DELETE operations on INVOICE_DETAILS
+-- and allows negative stock levels for business flexibility
+
+CREATE OR REPLACE TRIGGER trg_update_product_stock
+    AFTER INSERT OR UPDATE OR DELETE ON INVOICE_DETAILS
+    FOR EACH ROW
+BEGIN
+    -- Handle INSERT operation (new invoice detail added - reduce stock)
+    IF INSERTING THEN
+        UPDATE Products
+        SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) - :NEW.QTY
+        WHERE PRODUCT_NO = :NEW.PRODUCT_NO;
+        
+        DBMS_OUTPUT.PUT_LINE('Stock decreased for product ' || :NEW.PRODUCT_NO || 
+                           ' by ' || :NEW.QTY || ' units');
+    END IF;
+    
+    -- Handle UPDATE operation (invoice detail modified)
+    IF UPDATING THEN
+        -- Check if product number changed
+        IF :OLD.PRODUCT_NO != :NEW.PRODUCT_NO THEN
+            -- Restore stock for old product
+            UPDATE Products
+            SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) + :OLD.QTY
+            WHERE PRODUCT_NO = :OLD.PRODUCT_NO;
+            
+            -- Reduce stock for new product
+            UPDATE Products
+            SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) - :NEW.QTY
+            WHERE PRODUCT_NO = :NEW.PRODUCT_NO;
+            
+            DBMS_OUTPUT.PUT_LINE('Stock updated: Product ' || :OLD.PRODUCT_NO || 
+                               ' increased by ' || :OLD.QTY || 
+                               ', Product ' || :NEW.PRODUCT_NO || 
+                               ' decreased by ' || :NEW.QTY);
+        ELSE
+            -- Same product, but quantity changed
+            IF :OLD.QTY != :NEW.QTY THEN
+                -- Adjust stock by the difference (OLD - NEW because we want to reverse old effect and apply new)
+                UPDATE Products
+                SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) + (:OLD.QTY - :NEW.QTY)
+                WHERE PRODUCT_NO = :NEW.PRODUCT_NO;
+                
+                DBMS_OUTPUT.PUT_LINE('Stock adjusted for product ' || :NEW.PRODUCT_NO || 
+                                   ' by ' || (:OLD.QTY - :NEW.QTY) || ' units');
+            END IF;
+        END IF;
+    END IF;
+    
+    -- Handle DELETE operation (invoice detail removed - restore stock)
+    IF DELETING THEN
+        UPDATE Products
+        SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) + :OLD.QTY
+        WHERE PRODUCT_NO = :OLD.PRODUCT_NO;
+        
+        DBMS_OUTPUT.PUT_LINE('Stock restored for product ' || :OLD.PRODUCT_NO || 
+                           ' by ' || :OLD.QTY || ' units');
+    END IF;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Log error but don't stop the transaction
+        DBMS_OUTPUT.PUT_LINE('Warning: Stock update failed for product operation: ' || SQLERRM);
+        -- Note: We're not re-raising the exception to allow negative stock and continue transactions
+END trg_update_product_stock;
+/
+
+-- Create a view to monitor stock levels including negative stock warnings
+CREATE OR REPLACE VIEW v_product_stock_status AS
+SELECT 
+    p.PRODUCT_NO,
+    p.PRODUCTNAME,
+    p.QTY_ON_HAND,
+    p.REORDER_LEVEL,
+    CASE 
+        WHEN p.QTY_ON_HAND < 0 THEN 'NEGATIVE STOCK'
+        WHEN p.QTY_ON_HAND = 0 THEN 'OUT OF STOCK'
+        WHEN p.QTY_ON_HAND <= p.REORDER_LEVEL THEN 'LOW STOCK'
+        WHEN p.QTY_ON_HAND <= (p.REORDER_LEVEL * 1.5) THEN 'MODERATE'
+        ELSE 'ADEQUATE'
+    END AS STOCK_STATUS,
+    pt.PRODUCTTYPE_NAME,
+    p.SELL_PRICE,
+    p.COST_PRICE,
+    -- Calculate total sales for this product
+    NVL((SELECT SUM(id.QTY) 
+         FROM INVOICE_DETAILS id 
+         JOIN INVOICES i ON id.INVOICENO = i.INVOICENO
+         WHERE id.PRODUCT_NO = p.PRODUCT_NO 
+         AND i.INVOICE_STATUS != 'CANCELLED'), 0) AS TOTAL_SOLD
+FROM Products p
+LEFT JOIN Product_Type pt ON p.PRODUCTTYPE = pt.PRODUCTTYPE_ID
+ORDER BY 
+    CASE 
+        WHEN p.QTY_ON_HAND < 0 THEN 1  -- Negative stock first
+        WHEN p.QTY_ON_HAND = 0 THEN 2  -- Out of stock second
+        WHEN p.QTY_ON_HAND <= p.REORDER_LEVEL THEN 3  -- Low stock third
+        ELSE 4
+    END,
+    p.QTY_ON_HAND ASC;
+
 COMMIT;

@@ -53,14 +53,20 @@ function getSalesDataForExport($db, $start_date, $end_date) {
                 c.CLIENTNAME as client_name,
                 e.EMPLOYEENAME as employee_name,
                 i.INVOICE_STATUS as status,
-                NVL(SUM(id.QTY * id.PRICE), 0) as amount
+                NVL(c.DISCOUNT, 0) as client_discount,
+                NVL(SUM(id.QTY * id.PRICE), 0) as subtotal,
+                NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as discount_amount,
+                NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as amount,
+                NVL(SUM(id.QTY * p.COST_PRICE), 0) as cost,
+                NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as profit
             FROM INVOICES i
             LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
             LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
             LEFT JOIN Employees e ON i.EMPLOYEEID = e.EMPLOYEEID
+            LEFT JOIN Products p ON id.PRODUCT_NO = p.PRODUCT_NO
             WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                   AND TO_DATE(:end_date, 'YYYY-MM-DD')
-            GROUP BY i.INVOICENO, i.INVOICE_DATE, c.CLIENTNAME, e.EMPLOYEENAME, i.INVOICE_STATUS
+            GROUP BY i.INVOICENO, i.INVOICE_DATE, c.CLIENTNAME, e.EMPLOYEENAME, i.INVOICE_STATUS, c.DISCOUNT
             ORDER BY i.INVOICE_DATE DESC";
     
     $params = [':start_date' => $start_date, ':end_date' => $end_date];
@@ -75,10 +81,16 @@ function getInventoryDataForExport($db) {
                 p.QTY_ON_HAND as stock_level,
                 p.REORDER_LEVEL as reorder_level,
                 NVL(SUM(id.QTY), 0) as units_sold,
-                NVL(SUM(id.QTY * id.PRICE), 0) as revenue
+                NVL(SUM(id.QTY * id.PRICE), 0) as subtotal,
+                NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as discount_amount,
+                NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as revenue,
+                NVL(SUM(id.QTY * p.COST_PRICE), 0) as cost,
+                NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as profit
             FROM Products p
             LEFT JOIN Product_Type pt ON p.PRODUCTTYPE = pt.PRODUCTTYPE_ID
             LEFT JOIN INVOICE_DETAILS id ON p.PRODUCT_NO = id.PRODUCT_NO
+            LEFT JOIN INVOICES i ON id.INVOICENO = i.INVOICENO
+            LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
             GROUP BY p.PRODUCTNAME, pt.PRODUCTTYPE_NAME, p.QTY_ON_HAND, p.REORDER_LEVEL
             ORDER BY revenue DESC";
     
@@ -90,8 +102,13 @@ function getClientDataForExport($db, $start_date, $end_date) {
     $sql = "SELECT 
                 c.CLIENTNAME as client_name,
                 ct.TYPE_NAME as client_type,
-                COUNT(i.INVOICENO) as total_orders,
-                NVL(SUM(id.QTY * id.PRICE), 0) as total_revenue,
+                NVL(c.DISCOUNT, 0) as client_discount,
+                COUNT(DISTINCT i.INVOICENO) as total_orders,
+                NVL(SUM(id.QTY * id.PRICE), 0) as total_subtotal,
+                NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as total_discount_given,
+                NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as total_revenue,
+                NVL(SUM(id.QTY * p.COST_PRICE), 0) as total_cost,
+                NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as total_profit,
                 TO_CHAR(MAX(i.INVOICE_DATE), 'YYYY-MM-DD') as last_order,
                 CASE 
                     WHEN MAX(i.INVOICE_DATE) >= SYSDATE - 30 THEN 'Active'
@@ -101,9 +118,10 @@ function getClientDataForExport($db, $start_date, $end_date) {
             LEFT JOIN Client_Type ct ON c.CLIENT_TYPE = ct.CLIENT_TYPE
             LEFT JOIN INVOICES i ON c.CLIENT_NO = i.CLIENT_NO
             LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
+            LEFT JOIN Products p ON id.PRODUCT_NO = p.PRODUCT_NO
             WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                   AND TO_DATE(:end_date, 'YYYY-MM-DD')
-            GROUP BY c.CLIENTNAME, ct.TYPE_NAME
+            GROUP BY c.CLIENTNAME, ct.TYPE_NAME, c.DISCOUNT
             ORDER BY total_revenue DESC";
     
     $params = [':start_date' => $start_date, ':end_date' => $end_date];
@@ -115,23 +133,29 @@ function getEmployeeDataForExport($db, $start_date, $end_date) {
     $sql = "SELECT 
                 e.EMPLOYEENAME as employee_name,
                 j.JOB_TITLE as job_title,
-                COUNT(i.INVOICENO) as total_sales,
-                NVL(SUM(id.QTY * id.PRICE), 0) as revenue,
+                COUNT(DISTINCT i.INVOICENO) as total_sales,
+                NVL(SUM(id.QTY * id.PRICE), 0) as gross_revenue,
+                NVL(SUM(((id.QTY * id.PRICE) * NVL(c.DISCOUNT, 0)) / 100), 0) as discount_given,
+                NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) as revenue,
+                NVL(SUM(id.QTY * p.COST_PRICE), 0) as cost,
+                NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) - SUM(id.QTY * p.COST_PRICE), 0) as profit,
                 CASE 
-                    WHEN COUNT(i.INVOICENO) > 0 
-                    THEN NVL(SUM(id.QTY * id.PRICE), 0) / COUNT(i.INVOICENO)
+                    WHEN COUNT(DISTINCT i.INVOICENO) > 0 
+                    THEN ROUND(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)) / COUNT(DISTINCT i.INVOICENO), 2)
                     ELSE 0 
                 END as avg_order_value,
                 CASE 
-                    WHEN NVL(SUM(id.QTY * id.PRICE), 0) > 10000 THEN 'Excellent'
-                    WHEN NVL(SUM(id.QTY * id.PRICE), 0) > 5000 THEN 'Good'
-                    WHEN NVL(SUM(id.QTY * id.PRICE), 0) > 1000 THEN 'Average'
+                    WHEN NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) > 10000 THEN 'Excellent'
+                    WHEN NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) > 5000 THEN 'Good'
+                    WHEN NVL(SUM(id.QTY * id.PRICE * (1 - NVL(c.DISCOUNT, 0) / 100)), 0) > 1000 THEN 'Average'
                     ELSE 'Poor'
                 END as performance
             FROM Employees e
             LEFT JOIN JOBS j ON e.JOB_ID = j.JOB_ID
             LEFT JOIN INVOICES i ON e.EMPLOYEEID = i.EMPLOYEEID
             LEFT JOIN INVOICE_DETAILS id ON i.INVOICENO = id.INVOICENO
+            LEFT JOIN Products p ON id.PRODUCT_NO = p.PRODUCT_NO
+            LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
             WHERE i.INVOICE_DATE BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD') 
                   AND TO_DATE(:end_date, 'YYYY-MM-DD')
             GROUP BY e.EMPLOYEENAME, j.JOB_TITLE
@@ -143,46 +167,52 @@ function getEmployeeDataForExport($db, $start_date, $end_date) {
 }
 
 function exportToExcel($data, $report_type, $start_date, $end_date) {
-    // Set headers for Excel download
+    // Set headers for proper Excel CSV download
     header('Content-Type: application/vnd.ms-excel');
-    header('Content-Disposition: attachment; filename="' . $report_type . '_' . date('Y-m-d') . '.xls"');
+    header('Content-Disposition: attachment; filename="' . str_replace(' ', '_', $report_type) . '_' . date('Y-m-d') . '.csv"');
     header('Pragma: no-cache');
     header('Expires: 0');
     
-    echo '<html>';
-    echo '<head><meta charset="utf-8"><style>table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; } th { background-color: #f2f2f2; }</style></head>';
-    echo '<body>';
+    // Open output stream
+    $output = fopen('php://output', 'w');
     
-    echo '<h2>' . htmlspecialchars($report_type) . '</h2>';
-    echo '<p>Generated on: ' . date('Y-m-d H:i:s') . '</p>';
-    echo '<p>Date Range: ' . htmlspecialchars($start_date) . ' to ' . htmlspecialchars($end_date) . '</p>';
+    // Add BOM for UTF-8 Excel compatibility
+    fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
+    
+    // Write report header information
+    fputcsv($output, [$report_type]);
+    fputcsv($output, ['Generated on: ' . date('Y-m-d H:i:s')]);
+    fputcsv($output, ['Date Range: ' . $start_date . ' to ' . $end_date]);
+    fputcsv($output, []); // Empty row for spacing
     
     if (!empty($data)) {
-        echo '<table>';
-        
-        // Headers
-        echo '<tr>';
+        // Write column headers
         $firstRow = reset($data);
-        foreach (array_keys($firstRow) as $header) {
-            echo '<th>' . htmlspecialchars(ucwords(str_replace('_', ' ', $header))) . '</th>';
-        }
-        echo '</tr>';
+        $headers = array_map(function($header) {
+            return ucwords(str_replace('_', ' ', $header));
+        }, array_keys($firstRow));
+        fputcsv($output, $headers);
         
-        // Data rows
+        // Write data rows
         foreach ($data as $row) {
-            echo '<tr>';
-            foreach ($row as $cell) {
-                echo '<td>' . htmlspecialchars($cell ?? '') . '</td>';
-            }
-            echo '</tr>';
+            // Convert all values to strings and handle nulls
+            $cleanRow = array_map(function($cell) {
+                if ($cell === null) {
+                    return '';
+                }
+                // Format numbers properly for Excel
+                if (is_numeric($cell)) {
+                    return number_format((float)$cell, 2, '.', '');
+                }
+                return (string)$cell;
+            }, $row);
+            fputcsv($output, $cleanRow);
         }
-        
-        echo '</table>';
     } else {
-        echo '<p>No data found for the selected criteria.</p>';
+        fputcsv($output, ['No data found for the selected criteria']);
     }
     
-    echo '</body></html>';
+    fclose($output);
 }
 
 function exportToPDF($data, $report_type, $start_date, $end_date) {

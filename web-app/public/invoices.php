@@ -1116,7 +1116,7 @@ function getAllInvoices() {
                 FROM INVOICES i
                 LEFT JOIN Clients c ON i.CLIENT_NO = c.CLIENT_NO
                 LEFT JOIN Employees e ON i.EMPLOYEEID = e.EMPLOYEEID
-                INNER JOIN (
+                LEFT JOIN (
                     SELECT INVOICENO, 
                            SUM(QTY * PRICE) as SUBTOTAL_AMOUNT,
                            COUNT(*) as ITEM_COUNT
