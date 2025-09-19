@@ -34,7 +34,7 @@
 <body>
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container">
+        <div class="container-fluid">
             <a class="navbar-brand" href="index.php">
                 <i class="fas fa-database me-2"></i>
                 <?= APP_NAME ?>
@@ -114,7 +114,7 @@
     </nav>
 
     <!-- Main Content Container -->
-    <div class="container mt-4">
+    <div class="container-fluid mt-4">
         <?php
         // Display flash messages if any
         if (isset($_SESSION['flash_message'])) {
