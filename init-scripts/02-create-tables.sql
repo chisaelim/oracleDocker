@@ -187,62 +187,86 @@ CREATE TABLE INVOICE_DETAILS (
 
 -- CREATE TRIGGER TO AUTOMATICALLY UPDATE PRODUCT STOCK (QTY_ON_HAND)
 -- This trigger handles INSERT, UPDATE, DELETE operations on INVOICE_DETAILS
--- and allows negative stock levels for business flexibility
+-- Stock is only reduced when invoice status is not 'Cancelled'
+-- Stock is restored when invoice status changes to 'Cancelled'
 
 CREATE OR REPLACE TRIGGER trg_update_product_stock
     AFTER INSERT OR UPDATE OR DELETE ON INVOICE_DETAILS
     FOR EACH ROW
+DECLARE
+    v_old_status VARCHAR2(30);
+    v_new_status VARCHAR2(30);
 BEGIN
-    -- Handle INSERT operation (new invoice detail added - reduce stock)
-    IF INSERTING THEN
-        UPDATE Products
-        SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) - :NEW.QTY
-        WHERE PRODUCT_NO = :NEW.PRODUCT_NO;
-        
-        DBMS_OUTPUT.PUT_LINE('Stock decreased for product ' || :NEW.PRODUCT_NO || 
-                           ' by ' || :NEW.QTY || ' units');
+    -- Get invoice status for the operations
+    IF INSERTING OR DELETING THEN
+        -- For INSERT, get the status of the new invoice
+        -- For DELETE, get the status of the old invoice
+        SELECT INVOICE_STATUS INTO v_new_status 
+        FROM INVOICES 
+        WHERE INVOICENO = COALESCE(:NEW.INVOICENO, :OLD.INVOICENO);
+        v_old_status := v_new_status; -- Same for single operation
     END IF;
     
-    -- Handle UPDATE operation (invoice detail modified)
     IF UPDATING THEN
-        -- Check if product number changed
-        IF :OLD.PRODUCT_NO != :NEW.PRODUCT_NO THEN
-            -- Restore stock for old product
-            UPDATE Products
-            SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) + :OLD.QTY
-            WHERE PRODUCT_NO = :OLD.PRODUCT_NO;
-            
-            -- Reduce stock for new product
+        -- For UPDATE, get both old and new invoice statuses (could be different invoices)
+        SELECT INVOICE_STATUS INTO v_old_status 
+        FROM INVOICES 
+        WHERE INVOICENO = :OLD.INVOICENO;
+        
+        SELECT INVOICE_STATUS INTO v_new_status 
+        FROM INVOICES 
+        WHERE INVOICENO = :NEW.INVOICENO;
+    END IF;
+    
+    -- Handle INSERT operation (new invoice detail added)
+    IF INSERTING THEN
+        -- Only reduce stock if invoice is not cancelled
+        IF v_new_status != 'Cancelled' THEN
             UPDATE Products
             SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) - :NEW.QTY
             WHERE PRODUCT_NO = :NEW.PRODUCT_NO;
             
-            DBMS_OUTPUT.PUT_LINE('Stock updated: Product ' || :OLD.PRODUCT_NO || 
-                               ' increased by ' || :OLD.QTY || 
-                               ', Product ' || :NEW.PRODUCT_NO || 
-                               ' decreased by ' || :NEW.QTY);
+            DBMS_OUTPUT.PUT_LINE('Stock decreased for product ' || :NEW.PRODUCT_NO || 
+                               ' by ' || :NEW.QTY || ' units (Invoice Status: ' || v_new_status || ')');
         ELSE
-            -- Same product, but quantity changed
-            IF :OLD.QTY != :NEW.QTY THEN
-                -- Adjust stock by the difference (OLD - NEW because we want to reverse old effect and apply new)
-                UPDATE Products
-                SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) + (:OLD.QTY - :NEW.QTY)
-                WHERE PRODUCT_NO = :NEW.PRODUCT_NO;
-                
-                DBMS_OUTPUT.PUT_LINE('Stock adjusted for product ' || :NEW.PRODUCT_NO || 
-                                   ' by ' || (:OLD.QTY - :NEW.QTY) || ' units');
-            END IF;
+            DBMS_OUTPUT.PUT_LINE('Stock not affected for cancelled invoice - Product: ' || :NEW.PRODUCT_NO);
         END IF;
     END IF;
     
-    -- Handle DELETE operation (invoice detail removed - restore stock)
-    IF DELETING THEN
-        UPDATE Products
-        SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) + :OLD.QTY
-        WHERE PRODUCT_NO = :OLD.PRODUCT_NO;
+    -- Handle UPDATE operation (invoice detail modified)
+    IF UPDATING THEN
+        -- First, reverse the old transaction effect if it wasn't cancelled
+        IF v_old_status != 'Cancelled' THEN
+            UPDATE Products
+            SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) + :OLD.QTY
+            WHERE PRODUCT_NO = :OLD.PRODUCT_NO;
+        END IF;
         
-        DBMS_OUTPUT.PUT_LINE('Stock restored for product ' || :OLD.PRODUCT_NO || 
-                           ' by ' || :OLD.QTY || ' units');
+        -- Then, apply the new transaction effect if it's not cancelled
+        IF v_new_status != 'Cancelled' THEN
+            UPDATE Products
+            SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) - :NEW.QTY
+            WHERE PRODUCT_NO = :NEW.PRODUCT_NO;
+        END IF;
+        
+        DBMS_OUTPUT.PUT_LINE('Stock updated: Product ' || :OLD.PRODUCT_NO || 
+                           ' (Old Status: ' || v_old_status || '), Product ' || :NEW.PRODUCT_NO || 
+                           ' (New Status: ' || v_new_status || ')');
+    END IF;
+    
+    -- Handle DELETE operation (invoice detail removed)
+    IF DELETING THEN
+        -- Only restore stock if the deleted invoice detail was not from a cancelled invoice
+        IF v_old_status != 'Cancelled' THEN
+            UPDATE Products
+            SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) + :OLD.QTY
+            WHERE PRODUCT_NO = :OLD.PRODUCT_NO;
+            
+            DBMS_OUTPUT.PUT_LINE('Stock restored for product ' || :OLD.PRODUCT_NO || 
+                               ' by ' || :OLD.QTY || ' units (Invoice was: ' || v_old_status || ')');
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('Stock not restored for cancelled invoice - Product: ' || :OLD.PRODUCT_NO);
+        END IF;
     END IF;
     
 EXCEPTION
@@ -253,7 +277,54 @@ EXCEPTION
 END trg_update_product_stock;
 /
 
--- Create a view to monitor stock levels including negative stock warnings
+-- CREATE TRIGGER TO HANDLE INVOICE STATUS CHANGES
+-- This trigger monitors changes to INVOICE_STATUS and adjusts stock accordingly
+-- When status changes from 'Cancelled' to active: reduce stock
+-- When status changes from active to 'Cancelled': restore stock
+
+CREATE OR REPLACE TRIGGER trg_invoice_status_stock
+    AFTER UPDATE OF INVOICE_STATUS ON INVOICES
+    FOR EACH ROW
+    WHEN (OLD.INVOICE_STATUS != NEW.INVOICE_STATUS)
+BEGIN
+    -- Handle status change from 'Cancelled' to active status
+    IF :OLD.INVOICE_STATUS = 'Cancelled' AND :NEW.INVOICE_STATUS != 'Cancelled' THEN
+        -- Reduce stock for all products in this invoice
+        FOR rec IN (SELECT PRODUCT_NO, QTY FROM INVOICE_DETAILS WHERE INVOICENO = :NEW.INVOICENO) LOOP
+            UPDATE Products
+            SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) - rec.QTY
+            WHERE PRODUCT_NO = rec.PRODUCT_NO;
+            
+            DBMS_OUTPUT.PUT_LINE('Stock reduced for product ' || rec.PRODUCT_NO || 
+                               ' by ' || rec.QTY || ' units (Invoice ' || :NEW.INVOICENO || 
+                               ' status changed from Cancelled to ' || :NEW.INVOICE_STATUS || ')');
+        END LOOP;
+    END IF;
+    
+    -- Handle status change from active status to 'Cancelled'
+    IF :OLD.INVOICE_STATUS != 'Cancelled' AND :NEW.INVOICE_STATUS = 'Cancelled' THEN
+        -- Restore stock for all products in this invoice
+        FOR rec IN (SELECT PRODUCT_NO, QTY FROM INVOICE_DETAILS WHERE INVOICENO = :NEW.INVOICENO) LOOP
+            UPDATE Products
+            SET QTY_ON_HAND = NVL(QTY_ON_HAND, 0) + rec.QTY
+            WHERE PRODUCT_NO = rec.PRODUCT_NO;
+            
+            DBMS_OUTPUT.PUT_LINE('Stock restored for product ' || rec.PRODUCT_NO || 
+                               ' by ' || rec.QTY || ' units (Invoice ' || :NEW.INVOICENO || 
+                               ' status changed from ' || :OLD.INVOICE_STATUS || ' to Cancelled)');
+        END LOOP;
+    END IF;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Log error but don't stop the transaction
+        DBMS_OUTPUT.PUT_LINE('Warning: Stock update failed for invoice status change: ' || SQLERRM);
+        -- Note: We're not re-raising the exception to allow the status change to proceed
+END trg_invoice_status_stock;
+/
+
+-- Create a comprehensive view to monitor stock levels and sales
+-- This view shows current stock status and sales data excluding cancelled invoices
 CREATE OR REPLACE VIEW v_product_stock_status AS
 SELECT 
     p.PRODUCT_NO,
@@ -270,12 +341,22 @@ SELECT
     pt.PRODUCTTYPE_NAME,
     p.SELL_PRICE,
     p.COST_PRICE,
-    -- Calculate total sales for this product
+    -- Calculate total sales for this product (excluding cancelled invoices)
     NVL((SELECT SUM(id.QTY) 
          FROM INVOICE_DETAILS id 
          JOIN INVOICES i ON id.INVOICENO = i.INVOICENO
          WHERE id.PRODUCT_NO = p.PRODUCT_NO 
-         AND i.INVOICE_STATUS != 'CANCELLED'), 0) AS TOTAL_SOLD
+         AND i.INVOICE_STATUS != 'Cancelled'), 0) AS TOTAL_SOLD,
+    -- Calculate total quantity from all invoice details (including cancelled for reference)
+    NVL((SELECT SUM(id.QTY) 
+         FROM INVOICE_DETAILS id 
+         WHERE id.PRODUCT_NO = p.PRODUCT_NO), 0) AS TOTAL_INVOICED,
+    -- Calculate cancelled quantity
+    NVL((SELECT SUM(id.QTY) 
+         FROM INVOICE_DETAILS id 
+         JOIN INVOICES i ON id.INVOICENO = i.INVOICENO
+         WHERE id.PRODUCT_NO = p.PRODUCT_NO 
+         AND i.INVOICE_STATUS = 'Cancelled'), 0) AS CANCELLED_QTY
 FROM Products p
 LEFT JOIN Product_Type pt ON p.PRODUCTTYPE = pt.PRODUCTTYPE_ID
 ORDER BY 
@@ -289,7 +370,45 @@ ORDER BY
 
 COMMIT;
 
+/*
+===============================================================================
+ENHANCED STOCK MANAGEMENT SYSTEM - SUMMARY
+===============================================================================
 
+The system now includes intelligent stock management with the following features:
+
+1. INVOICE_DETAILS TRIGGER (trg_update_product_stock):
+   - Only reduces stock when invoice status is NOT 'Cancelled'
+   - Handles INSERT, UPDATE, DELETE operations on invoice details
+   - Considers invoice status when making stock adjustments
+   - Provides detailed logging of all stock movements
+
+2. INVOICE STATUS TRIGGER (trg_invoice_status_stock):
+   - Monitors changes to INVOICE_STATUS field
+   - When status changes FROM 'Cancelled' TO active: reduces stock
+   - When status changes FROM active TO 'Cancelled': restores stock
+   - Processes all invoice details automatically
+
+3. STOCK STATUS VIEW (v_product_stock_status):
+   - Shows current stock levels and status
+   - Displays total sold (excluding cancelled invoices)
+   - Shows total invoiced and cancelled quantities for analysis
+   - Provides comprehensive stock monitoring
+
+BUSINESS LOGIC:
+- Cancelled invoices do not affect stock levels
+- Stock is automatically adjusted when invoice status changes
+- Negative stock levels are allowed for business flexibility
+- All stock movements are logged for audit purposes
+
+USAGE EXAMPLES:
+- New invoice created: Stock reduced immediately (if not cancelled)
+- Invoice cancelled: Stock restored automatically
+- Invoice reactivated: Stock reduced again
+- Invoice details modified: Stock adjusted based on both old and new status
+
+===============================================================================
+*/
 
 -- Insert sample data for all tables
 -- This script will populate all tables with meaningful test data

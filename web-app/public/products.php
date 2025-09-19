@@ -538,7 +538,10 @@ function getProductPhotoPath($productNo)
                                             </td>
                                             <td>$<?= number_format($product['SELL_PRICE'], 2) ?></td>
                                             <td>
-                                                <?php if ($product['QTY_ON_HAND'] <= $product['REORDER_LEVEL']): ?>
+                                                <?php if ($product['QTY_ON_HAND'] <= 0): ?>
+                                                    <span class="badge bg-danger"><?= $product['QTY_ON_HAND'] ?> (Out of
+                                                        Stock)</span>
+                                                <?php elseif ($product['QTY_ON_HAND'] <= $product['REORDER_LEVEL']): ?>
                                                     <span class="badge bg-warning"><?= $product['QTY_ON_HAND'] ?> (Low Stock)</span>
                                                 <?php else: ?>
                                                     <?= $product['QTY_ON_HAND'] ?>
