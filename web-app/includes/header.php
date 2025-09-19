@@ -76,7 +76,7 @@
                             <i class="fas fa-box me-1"></i> Products
                         </a>
                     </li>
-                     <li class="nav-item">
+                    <li class="nav-item">
                         <a class="nav-link <?= basename($_SERVER['PHP_SELF']) == 'jobs.php' ? 'active' : '' ?>"
                             href="jobs.php">
                             <i class="fas fa-layer-group me-1"></i> Jobs
@@ -86,6 +86,12 @@
                         <a class="nav-link <?= basename($_SERVER['PHP_SELF']) == 'employees.php' ? 'active' : '' ?>"
                             href="employees.php">
                             <i class="fas fa-user-tie me-1"></i> Employees
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?= basename($_SERVER['PHP_SELF']) == 'invoices.php' ? 'active' : '' ?>"
+                            href="invoices.php">
+                            <i class="fas fa-file-invoice-dollar me-1"></i>Invoices
                         </a>
                     </li>
                 </ul>
