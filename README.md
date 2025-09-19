@@ -90,10 +90,10 @@ A sophisticated containerized business management system featuring **Oracle XE D
 │  (Port 8090)    │    │  (Apache/PHP8.1) │    │  (Port 1522)    │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
-         │              ┌────────▼────────┐             │
-         │              │ Docker Compose  │             │
-         │              │   Orchestration │             │
-         │              └─────────────────┘             │
+         │              ┌────────▼────────┐              │
+         │              │ Docker Compose  │              │
+         │              │   Orchestration │              │
+         │              └─────────────────┘              │
          │                                               │
     Bootstrap UI                                Oracle Triggers
    Responsive Design                            Stock Management
